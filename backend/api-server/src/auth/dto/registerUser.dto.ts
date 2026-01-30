@@ -1,15 +1,15 @@
-import { IsEmail, IsString } from 'class-validator';
+import { IsEmail, IsNotEmpty, IsString } from 'class-validator';
 
 export class RegisterDto {
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-call
+  @IsNotEmpty()
   @IsString()
   username: string;
 
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-call
+  @IsNotEmpty()
   @IsEmail()
   email: string;
 
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-call
+  @IsNotEmpty()
   @IsString()
   password: string;
 }

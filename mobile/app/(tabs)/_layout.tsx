@@ -30,8 +30,8 @@ export default function TabLayout() {
             alignItems: 'center',
             borderRadius: 20,
             marginHorizontal: 10,
-            marginBottom: 10,
-            backgroundColor: Colors[colorScheme ?? "light"].background,
+            marginBottom: 25,
+            backgroundColor: Colors[colorScheme ?? "light"].tabBackground,
             shadowColor: "#000",
             shadowOffset: {
               width: 0,
