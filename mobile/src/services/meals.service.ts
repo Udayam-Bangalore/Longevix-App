@@ -3,7 +3,7 @@ import { FoodItem } from "@/src/contexts/meals.context";
 import { authService } from "./auth.service";
 
 export interface Meal {
-  _id: string;
+  id: string;
   userId: string;
   name: string;
   items: FoodItem[];

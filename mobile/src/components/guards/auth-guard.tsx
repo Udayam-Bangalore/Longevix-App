@@ -1,26 +1,35 @@
-import { useEffect } from "react";
-import { router } from "expo-router";
 import { useAuth } from "@/src/contexts/auth.context";
+import { router } from "expo-router";
+import { useEffect } from "react";
+import { ActivityIndicator, StyleSheet, View } from "react-native";
 
 interface AuthGuardProps {
   children: React.ReactNode;
 }
 
 export function AuthGuard({ children }: AuthGuardProps) {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, user } = useAuth();
 
   useEffect(() => {
-    if (!isLoading && !isAuthenticated) {
-      router.replace("/(auth)/welcome");
+    if (!isLoading) {
+      if (!isAuthenticated) {
+        router.replace("/(auth)/welcome");
+      } else if (user && !user.profileCompleted) {
+        router.replace("/(auth)/profile-setup");
+      }
     }
-  }, [isAuthenticated, isLoading]);
+  }, [isAuthenticated, isLoading, user]);
 
   if (isLoading) {
-    // You can return a loading spinner here
-    return null;
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#2E7D32" />
+      </View>
+    );
   }
 
-  return isAuthenticated ? <>{children}</> : null;
+  // Only show children if authenticated and profile is completed
+  return isAuthenticated && user?.profileCompleted ? <>{children}</> : null;
 }
 
 interface GuestGuardProps {
@@ -37,9 +46,21 @@ export function GuestGuard({ children }: GuestGuardProps) {
   }, [isAuthenticated, isLoading]);
 
   if (isLoading) {
-    // You can return a loading spinner here
-    return null;
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#2E7D32" />
+      </View>
+    );
   }
 
   return !isAuthenticated ? <>{children}</> : null;
 }
+
+const styles = StyleSheet.create({
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#FFFFFF",
+  },
+});

@@ -6,7 +6,8 @@ import React, { useCallback, useMemo, useRef, useState } from "react";
 import {
   Animated,
   Dimensions,
-  FlatList,
+  ListRenderItem,
+  FlatList as RNFlatList,
   StatusBar,
   StyleSheet,
   Text,
@@ -14,6 +15,9 @@ import {
   View,
   ViewToken,
 } from "react-native";
+
+// Create animated FlatList to support native onScroll events with useNativeDriver
+const AnimatedFlatList = Animated.createAnimatedComponent(RNFlatList) as React.ComponentType<any>;
 
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
@@ -71,7 +75,6 @@ const SLIDES: OnboardingSlide[] = [
     id: "4",
     icon: "exclamation",
     title: "Important Disclaimer",
-    description: "By continuing, you agree to our Terms & Privacy Policy",
     colors: ["#FFFAE7", "#FFFFFF"],
     type: "disclaimer",
   },
@@ -187,31 +190,20 @@ const SlideContent: React.FC<SlideContentProps> = ({ slide, index }) => {
   const showTitleSubtitle = slide.type !== "disclaimer";
 
   return (
-    <>
-      <View
-        style={[
-          styles.topContent,
-          index === 0 && styles.topContentFirst,
-          index === 1 && styles.topContentSecond,
-          index === 3 && styles.topContentFourth,
-        ]}
-      >
-        {renderContent()}
+    <View style={styles.contentContainer}>
+      {renderContent()}
 
-        {showTitleSubtitle && (
-          <>
-            <Text style={styles.title}>{slide.title}</Text>
-            <Text style={styles.subtitle}>{slide.subtitle}</Text>
-          </>
-        )}
-      </View>
+      {showTitleSubtitle && (
+        <>
+          <Text style={styles.title}>{slide.title}</Text>
+          <Text style={styles.subtitle}>{slide.subtitle}</Text>
+        </>
+      )}
 
       {slide.description && (
-        <View style={styles.bottomContent}>
-          <Text style={styles.description}>{slide.description}</Text>
-        </View>
+        <Text style={styles.description}>{slide.description}</Text>
       )}
-    </>
+    </View>
   );
 };
 
@@ -220,7 +212,7 @@ const PaginationDots: React.FC<{ currentIndex: number; total: number }> = ({
   currentIndex,
   total,
 }) => (
-  <View style={styles.paginationOverlay}>
+  <View style={styles.paginationContainer}>
     {Array.from({ length: total }).map((_, index) => (
       <View
         key={index}
@@ -274,6 +266,11 @@ const BottomCTA: React.FC<{
         color="#fff"
       />
     </TouchableOpacity>
+    {isLastSlide && (
+      <Text style={styles.termsText}>
+        By continuing, you agree to our Terms & Privacy Policy
+      </Text>
+    )}
   </View>
 );
 
@@ -282,7 +279,7 @@ const BottomCTA: React.FC<{
 export default function OnboardingScreen() {
   const { setHasSeenWelcome } = useAuth();
   const [currentIndex, setCurrentIndex] = useState(0);
-  const flatListRef = useRef<FlatList>(null);
+  const flatListRef = useRef<RNFlatList>(null);
   const scrollX = useRef(new Animated.Value(0)).current;
 
   
@@ -319,7 +316,7 @@ export default function OnboardingScreen() {
         animated: true,
       });
     } else {
-      router.back();
+      router.replace("/(auth)/welcome");
     }
   }, [currentIndex]);
 
@@ -341,7 +338,7 @@ export default function OnboardingScreen() {
 
   
   const renderSlide = useCallback(
-    ({ item, index }: { item: OnboardingSlide; index: number }) => {
+    ({ item, index }: { item: OnboardingSlide; index: number }): React.ReactElement => {
       const inputRange = [
         (index - 1) * SCREEN_WIDTH,
         index * SCREEN_WIDTH,
@@ -370,33 +367,36 @@ export default function OnboardingScreen() {
             end={{ x: 1, y: 1 }}
             style={styles.slide}
           >
-            <Animated.View
-              style={[
-                styles.slideAnimatedContent,
-                { transform: [{ scale }], opacity },
-                isDisclaimerSlide && styles.slideDisclaimerContent,
-              ]}
-            >
-              <SlideContent slide={item} index={index} />
-            </Animated.View>
+            <View style={styles.slideContentWrapper}>
+              <Animated.View
+                style={[
+                  styles.slideAnimatedContent,
+                  { transform: [{ scale }], opacity },
+                ]}
+              >
+                <SlideContent slide={item} index={index} />
+              </Animated.View>
+              <PaginationDots currentIndex={currentIndex} total={SLIDES.length} />
+              <BottomCTA isLastSlide={isLastSlide} onPress={handleNext} />
+            </View>
           </LinearGradient>
         </View>
       );
     },
-    [scrollX]
+    [scrollX, currentIndex, isLastSlide, handleNext]
   );
 
   
   const keyExtractor = useCallback((item: OnboardingSlide) => item.id, []);
 
   return (
-    <>
+    <View style={styles.container}>
       <StatusBar barStyle="dark-content" />
 
-      <Animated.FlatList
+      <AnimatedFlatList
         ref={flatListRef}
         data={SLIDES}
-        renderItem={renderSlide}
+        renderItem={renderSlide as ListRenderItem<OnboardingSlide>}
         keyExtractor={keyExtractor}
         horizontal
         pagingEnabled
@@ -409,15 +409,19 @@ export default function OnboardingScreen() {
         onViewableItemsChanged={onViewableItemsChanged}
         viewabilityConfig={viewabilityConfig}
         scrollEventThrottle={16}
-        contentContainerStyle={styles.flatListContent}
+        getItemLayout={(_data: unknown, index: number) => ({
+          length: SCREEN_WIDTH,
+          offset: SCREEN_WIDTH * index,
+          index,
+        })}
+        initialNumToRender={SLIDES.length}
+        maxToRenderPerBatch={SLIDES.length}
+        windowSize={SLIDES.length}
+        removeClippedSubviews={false}
       />
 
       <Header onBack={handleBack} onSkip={handleSkip} />
-
-      <PaginationDots currentIndex={currentIndex} total={SLIDES.length} />
-
-      <BottomCTA isLastSlide={isLastSlide} onPress={handleNext} />
-    </>
+    </View>
   );
 }
 
@@ -425,56 +429,47 @@ export default function OnboardingScreen() {
 // Styles
 // ============================================================================
 const styles = StyleSheet.create({
+  // Container
+  container: {
+    flex: 1,
+    backgroundColor: "#FFFFFF",
+  },
   // Layout
   slideContainer: {
     width: SCREEN_WIDTH,
     height: SCREEN_HEIGHT,
+    overflow: "hidden",
   },
   slide: {
     width: SCREEN_WIDTH,
     height: SCREEN_HEIGHT,
-    justifyContent: "center",
+    justifyContent: "flex-start",
     alignItems: "center",
-    paddingHorizontal: 40,
-    paddingTop: 40,
+  },
+  slideContentWrapper: {
+    flex: 1,
+    width: "100%",
+    alignItems: "center",
+    paddingTop: 100,
+    paddingHorizontal: 20,
   },
   slideAnimatedContent: {
     flex: 1,
-    justifyContent: "space-between",
+    width: "100%",
     alignItems: "center",
-  },
-  slideDisclaimerContent: {
-    justifyContent: "flex-start",
-    paddingTop: responsiveHeight(60, 0.08),
   },
   flatListContent: {
     flexGrow: 1,
-  },
-
-  // Top Content
-  topContent: {
-    flex: 2,
-    justifyContent: "center",
-    alignItems: "center",
-    paddingHorizontal: 40,
-  },
-  topContentFirst: {
-    paddingTop: 60,
-  },
-  topContentSecond: {
-    paddingTop: 20,
-  },
-  topContentFourth: {
-    paddingHorizontal: 20,
-  },
-
-  // Bottom Content
-  bottomContent: {
     flex: 1,
-    justifyContent: "center",
+  },
+
+  // Content Container
+  contentContainer: {
+    flex: 1,
     alignItems: "center",
-    paddingHorizontal: 40,
-    paddingBottom: 100,
+    justifyContent: "flex-start",
+    paddingHorizontal: 20,
+    width: "100%",
   },
 
   // Header
@@ -501,9 +496,17 @@ const styles = StyleSheet.create({
   },
 
   // Pagination
+  paginationContainer: {
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 12,
+    marginTop: 30,
+    marginBottom: 10,
+  },
   paginationOverlay: {
     position: "absolute",
-    bottom: responsiveHeight(120, 0.15),
+    bottom: responsiveHeight(40, 0.08),
     left: 0,
     right: 0,
     flexDirection: "row",
@@ -519,7 +522,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0, 0, 0, 0.3)",
   },
   activeDot: {
-    backgroundColor: "#2E7D32",
+    backgroundColor: "#333",
     width: 16,
     height: 16,
     borderRadius: 8,
@@ -527,28 +530,27 @@ const styles = StyleSheet.create({
 
   // Bottom CTA
   bottomContainer: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
     paddingHorizontal: 24,
     paddingBottom: 40,
-    zIndex: 10,
+    paddingTop: 10,
+    width: "100%",
+    backgroundColor: "transparent",
   },
   nextButton: {
-    backgroundColor: "#2E7D32",
-    paddingVertical: responsiveHeight(18, 0.025),
+    backgroundColor: "#4CAF50",
+    paddingVertical: responsiveHeight(16, 0.025),
     paddingHorizontal: responsiveSize(24, 0.06),
     borderRadius: 16,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 10,
+    borderWidth: 0,
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
-    elevation: 12,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 5,
   },
   nextButtonText: {
     color: "#fff",
@@ -594,29 +596,29 @@ const styles = StyleSheet.create({
 
   // Typography
   title: {
-    fontSize: responsiveSize(32, 0.08),
+    fontSize: responsiveSize(28, 0.07),
     fontWeight: "800",
     color: "#333",
     textAlign: "center",
-    marginBottom: 12,
+    marginBottom: 8,
     letterSpacing: 0.5,
   },
   subtitle: {
-    fontSize: responsiveSize(16, 0.04),
+    fontSize: responsiveSize(14, 0.035),
     fontWeight: "600",
     color: "#666",
     textAlign: "center",
-    marginBottom: 20,
+    marginBottom: 16,
     textTransform: "uppercase",
     letterSpacing: 2,
   },
   description: {
-    fontSize: responsiveSize(16, 0.04),
+    fontSize: responsiveSize(14, 0.035),
     color: "#555",
     textAlign: "center",
-    lineHeight: 24,
+    lineHeight: 22,
     fontWeight: "500",
-    paddingHorizontal: 20,
+    paddingHorizontal: 16,
   },
 
   // Nutrition Cards
@@ -717,6 +719,13 @@ const styles = StyleSheet.create({
     color: "#333",
     textAlign: "center",
     lineHeight: 26,
+    fontWeight: "500",
+  },
+  termsText: {
+    fontSize: responsiveSize(12, 0.03),
+    color: "#666",
+    textAlign: "center",
+    marginTop: 12,
     fontWeight: "500",
   },
 });

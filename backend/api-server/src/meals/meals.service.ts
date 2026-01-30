@@ -1,24 +1,22 @@
 import { Injectable } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
-import { FoodItem, Meal, MealDocument } from './schemas/meal.schema';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { FoodItem, Meal } from './entities/meal.entity';
 
 @Injectable()
 export class MealsService {
-  constructor(@InjectModel(Meal.name) private mealModel: Model<MealDocument>) {}
+  constructor(@InjectRepository(Meal) private mealRepository: Repository<Meal>) {}
 
   async createMeal(userId: string, mealName: string, foodItems: FoodItem[]): Promise<Meal> {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    
     let totalCalories = 0;
     const totalMicronutrients: Record<string, number> = {};
-    
+
     foodItems.forEach(item => {
-      totalCalories += 150;
-      
-      
+      totalCalories += item.calories || 0;
+
       if (item.micronutrients) {
         Object.entries(item.micronutrients).forEach(([key, value]) => {
           if (!totalMicronutrients[key]) {
@@ -29,38 +27,36 @@ export class MealsService {
       }
     });
 
-    
-    let existingMeal = await this.mealModel.findOne({
-      userId,
-      name: mealName,
-      date: {
-        $gte: today,
-        $lt: new Date(today.getTime() + 24 * 60 * 60 * 1000),
-      },
-    });
+    const endDate = new Date(today);
+    endDate.setDate(endDate.getDate() + 1);
+
+    const existingMeal = await this.mealRepository
+      .createQueryBuilder('meal')
+      .where('meal.userId = :userId', { userId })
+      .andWhere('meal.name = :mealName', { mealName })
+      .andWhere('meal.date >= :today', { today })
+      .andWhere('meal.date < :endDate', { endDate })
+      .getOne();
 
     if (existingMeal) {
-      
       existingMeal.items = [...existingMeal.items, ...foodItems];
       existingMeal.calories += totalCalories;
-      
-      
+
       if (!existingMeal.micronutrients) {
         existingMeal.micronutrients = {};
       }
-      
+
       Object.entries(totalMicronutrients).forEach(([key, value]) => {
         if (!existingMeal.micronutrients![key]) {
           existingMeal.micronutrients![key] = 0;
         }
         existingMeal.micronutrients![key] += value;
       });
-      
-      return existingMeal.save();
+
+      return this.mealRepository.save(existingMeal);
     }
 
-    
-    const newMeal = new this.mealModel({
+    const newMeal = this.mealRepository.create({
       userId,
       name: mealName,
       items: foodItems,
@@ -69,30 +65,31 @@ export class MealsService {
       date: today,
     });
 
-    return newMeal.save();
+    return this.mealRepository.save(newMeal);
   }
 
   async getMealsByDate(userId: string, date: Date): Promise<Meal[]> {
     const startDate = new Date(date);
     startDate.setHours(0, 0, 0, 0);
-    
+
     const endDate = new Date(startDate);
     endDate.setDate(endDate.getDate() + 1);
 
-    return this.mealModel.find({
-      userId,
-      date: {
-        $gte: startDate,
-        $lt: endDate,
-      },
-    }).exec();
+    return this.mealRepository
+      .createQueryBuilder('meal')
+      .where('meal.userId = :userId', { userId })
+      .andWhere('meal.date >= :startDate', { startDate })
+      .andWhere('meal.date < :endDate', { endDate })
+      .getMany();
   }
 
   async getMealById(userId: string, mealId: string): Promise<Meal | null> {
-    return this.mealModel.findOne({
-      _id: mealId,
-      userId,
-    }).exec();
+    return this.mealRepository.findOne({
+      where: {
+        id: mealId,
+        userId,
+      },
+    });
   }
 
   async addFoodToMeal(userId: string, mealName: string, foodItem: FoodItem): Promise<Meal> {
@@ -100,17 +97,36 @@ export class MealsService {
   }
 
   async removeFoodFromMeal(userId: string, mealId: string, foodId: string): Promise<Meal> {
-    const meal = await this.mealModel.findOne({
-      _id: mealId,
-      userId,
+    const meal = await this.mealRepository.findOne({
+      where: {
+        id: mealId,
+        userId,
+      },
     });
 
     if (!meal) {
       throw new Error('Meal not found');
     }
 
+    // Find the food item being removed to calculate calories to subtract
+    const removedItem = meal.items.find(item => item.id === foodId);
+    if (removedItem) {
+      meal.calories -= Number(removedItem.calories);
+      
+      // Subtract micronutrients
+      if (removedItem.micronutrients) {
+        Object.entries(removedItem.micronutrients).forEach(([key, value]) => {
+          if (meal.micronutrients && meal.micronutrients[key]) {
+            meal.micronutrients[key] -= value;
+            if (meal.micronutrients[key] < 0) {
+              meal.micronutrients[key] = 0;
+            }
+          }
+        });
+      }
+    }
+
     meal.items = meal.items.filter(item => item.id !== foodId);
-    meal.calories -= 150;
-    return meal.save();
+    return this.mealRepository.save(meal);
   }
 }

@@ -1,9 +1,9 @@
 import { Body, Controller, Delete, Get, Param, Post, Req, UseGuards } from '@nestjs/common';
 import { AuthGuard } from '../auth/auth.guard';
+import { FoodItem } from './entities/meal.entity';
 import { MealsService } from './meals.service';
-import { FoodItem } from './schemas/meal.schema';
 
-@Controller('api/meals')
+@Controller('meals')
 @UseGuards(AuthGuard)
 export class MealsController {
   constructor(private readonly mealsService: MealsService) {}

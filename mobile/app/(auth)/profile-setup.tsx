@@ -1,3 +1,5 @@
+import { useAuth } from "@/src/contexts/auth.context";
+import { authService } from "@/src/services/auth.service";
 import { Ionicons } from "@expo/vector-icons";
 import FontAwesome6 from "@expo/vector-icons/FontAwesome6";
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
@@ -5,17 +7,17 @@ import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
 import {
-    Animated,
-    Dimensions,
-    KeyboardAvoidingView,
-    Platform,
-    ScrollView,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  Animated,
+  Dimensions,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
@@ -501,25 +503,33 @@ export default function ProfileSetupScreen() {
 
   const isCurrentStepValid = currentStep === 1 ? isStep1Valid : isStep2Valid;
 
-  const handleNext = () => {
+  const handleNext = async () => {
     if (!isCurrentStepValid) return;
 
     if (currentStep < totalSteps) {
       setCurrentStep(currentStep + 1);
     } else {
-      
-      const profileData = {
-        age: parseInt(age, 10),
-        sex,
-        height: height ? parseFloat(height) : null,
-        weight: weight ? parseFloat(weight) : null,
-        activityLevel,
-        dietType,
-        primaryGoal,
-      };
+      try {
+        const profileData = {
+          age: parseInt(age, 10),
+          sex,
+          height: height ? parseFloat(height) : null,
+          weight: weight ? parseFloat(weight) : null,
+          activityLevel,
+          dietType,
+          primaryGoal,
+        };
 
-      
-      router.replace("/(tabs)");
+        const updatedUser = await authService.updateProfile(profileData);
+        console.log("Updated user data:", updatedUser);
+        // Update user state in context
+        const { setUser } = useAuth();
+        setUser(updatedUser);
+        router.replace("/(tabs)");
+      } catch (error) {
+        console.error("Error updating profile:", error);
+        // Handle error - show toast or alert
+      }
     }
   };
 
