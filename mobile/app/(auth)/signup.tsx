@@ -6,18 +6,18 @@ import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
 import {
-    Alert,
-    Animated,
-    Dimensions,
-    KeyboardAvoidingView,
-    Platform,
-    ScrollView,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  Alert,
+  Animated,
+  Dimensions,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
@@ -37,6 +37,11 @@ export default function SignUpScreen() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [acceptedTerms, setAcceptedTerms] = useState(false);
+  const [registerMethod, setRegisterMethod] = useState<'email' | 'phone'>('email');
+  const [phone, setPhone] = useState("");
+  const [otp, setOtp] = useState("");
+  const [otpSent, setOtpSent] = useState(false);
+  const [resendTimer, setResendTimer] = useState(0);
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(30)).current;
@@ -63,7 +68,9 @@ export default function SignUpScreen() {
     ]).start();
   }, []);
 
-  const isFormValid =
+  const { register: registerUser, sendPhoneOtp, verifyPhoneOtp, verifyPhoneAndSetUsername } = useAuth();
+
+  const isEmailFormValid =
     userName &&
     email &&
     password &&
@@ -71,10 +78,10 @@ export default function SignUpScreen() {
     password === confirmPassword &&
     acceptedTerms;
 
-  const { register: registerUser } = useAuth();
+  const isPhoneFormValid = userName && phone && acceptedTerms && (otpSent ? otp.length >= 4 : true);
 
   const handleSignUp = async () => {
-    
+    const isFormValid = registerMethod === 'email' ? isEmailFormValid : isPhoneFormValid;
     
     if (!isFormValid) {
       Alert.alert(
@@ -87,15 +94,19 @@ export default function SignUpScreen() {
     setIsLoading(true);
     
 
-    try {
-      await registerUser(
-        userName,
-        email.trim(),
-        password
-      );
-      
-      
-      router.push("/(auth)/profile-setup");
+     try {
+      if (registerMethod === 'email') {
+        const result = await registerUser(
+          userName,
+          email.trim(),
+          password
+        );
+        // Navigate to email verification screen
+        router.push({
+          pathname: "/(auth)/email-verification",
+          params: { email: email.trim() },
+        });
+      }
     } catch (error) {
       console.error("Registration error details:", error);
       Alert.alert(
@@ -106,6 +117,93 @@ export default function SignUpScreen() {
       setIsLoading(false);
       
     }
+  };
+
+  const handleSendPhoneOtp = async () => {
+    if (!phone) {
+      Alert.alert(
+        "Validation Error",
+        "Please enter your phone number",
+      );
+      return;
+    }
+
+    // Check if phone number starts with country code
+    const phoneRegex = /^\+[1-9]\d{1,14}$/;
+    const phoneDigitsOnly = phone.replace(/\D/g, '');
+
+    if (!phone.startsWith('+')) {
+      Alert.alert(
+        "Invalid Format",
+        "Please enter your phone number with country code (e.g., +919876543210)",
+      );
+      return;
+    }
+
+    if (!phoneRegex.test(phone)) {
+      Alert.alert(
+        "Invalid Phone Number",
+        "Please enter a valid phone number with country code (e.g., +919876543210)",
+      );
+      return;
+    }
+
+    setIsLoading(true);
+
+    try {
+      await sendPhoneOtp(phone);
+      setOtpSent(true);
+      setResendTimer(30);
+      const timer = setInterval(() => {
+        setResendTimer((prev) => {
+          if (prev <= 1) {
+            clearInterval(timer);
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    } catch (error) {
+      console.error("Send OTP error:", error);
+      Alert.alert(
+        "Failed to Send OTP",
+        error instanceof Error ? error.message : "An unexpected error occurred",
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleVerifyPhoneOtp = async () => {
+    if (!otp || otp.length < 4) {
+      Alert.alert(
+        "Validation Error",
+        "Please enter the OTP sent to your phone",
+      );
+      return;
+    }
+
+    setIsLoading(true);
+
+    try {
+      await verifyPhoneAndSetUsername(phone, otp, userName);
+      router.push("/(auth)/profile-setup");
+    } catch (error) {
+      console.error("Verify OTP error:", error);
+      Alert.alert(
+        "Verification Failed",
+        error instanceof Error ? error.message : "An unexpected error occurred",
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const toggleRegisterMethod = () => {
+    setRegisterMethod(registerMethod === 'email' ? 'phone' : 'email');
+    setOtpSent(false);
+    setOtp("");
+    setResendTimer(0);
   };
 
   const handleBack = () => {
@@ -200,136 +298,206 @@ export default function SignUpScreen() {
                 />
               </View>
 
-              <View style={styles.inputContainer}>
-                <View style={styles.inputIconContainer}>
-                  <Ionicons name="mail-outline" size={22} color="#2E7D32" />
-                </View>
-                <TextInput
-                  style={styles.input}
-                  placeholder="Email address"
-                  placeholderTextColor="#999"
-                  value={email}
-                  onChangeText={setEmail}
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                />
-              </View>
+              {registerMethod === 'email' ? (
+                <>
+                  <View style={styles.inputContainer}>
+                    <View style={styles.inputIconContainer}>
+                      <Ionicons name="mail-outline" size={22} color="#2E7D32" />
+                    </View>
+                    <TextInput
+                      style={styles.input}
+                      placeholder="Email address"
+                      placeholderTextColor="#999"
+                      value={email}
+                      onChangeText={setEmail}
+                      keyboardType="email-address"
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                    />
+                  </View>
 
-              <View style={styles.inputContainer}>
-                <View style={styles.inputIconContainer}>
-                  <Ionicons
-                    name="lock-closed-outline"
-                    size={22}
-                    color="#2E7D32"
-                  />
-                </View>
-                <TextInput
-                  style={styles.input}
-                  placeholder="Password"
-                  placeholderTextColor="#999"
-                  value={password}
-                  onChangeText={setPassword}
-                  secureTextEntry={!showPassword}
-                  autoCapitalize="none"
-                />
-                <TouchableOpacity
-                  onPress={() => setShowPassword(!showPassword)}
-                  style={styles.eyeButton}
-                >
-                  <Ionicons
-                    name={showPassword ? "eye-off-outline" : "eye-outline"}
-                    size={22}
-                    color="#666"
-                  />
-                </TouchableOpacity>
-              </View>
+                  <View style={styles.inputContainer}>
+                    <View style={styles.inputIconContainer}>
+                      <Ionicons
+                        name="lock-closed-outline"
+                        size={22}
+                        color="#2E7D32"
+                      />
+                    </View>
+                    <TextInput
+                      style={styles.input}
+                      placeholder="Password"
+                      placeholderTextColor="#999"
+                      value={password}
+                      onChangeText={setPassword}
+                      secureTextEntry={!showPassword}
+                      autoCapitalize="none"
+                    />
+                    <TouchableOpacity
+                      onPress={() => setShowPassword(!showPassword)}
+                      style={styles.eyeButton}
+                    >
+                      <Ionicons
+                        name={showPassword ? "eye-off-outline" : "eye-outline"}
+                        size={22}
+                        color="#666"
+                      />
+                    </TouchableOpacity>
+                  </View>
 
-              {password.length > 0 && (
-                <View style={styles.strengthContainer}>
-                  <View style={styles.strengthBars}>
-                    {[1, 2, 3].map((level) => (
-                      <View
-                        key={level}
+                  {password.length > 0 && (
+                    <View style={styles.strengthContainer}>
+                      <View style={styles.strengthBars}>
+                        {[1, 2, 3].map((level) => (
+                          <View
+                            key={level}
+                            style={[
+                              styles.strengthBar,
+                              {
+                                backgroundColor:
+                                  passwordStrength.level >= level
+                                    ? passwordStrength.color
+                                    : "#E0E0E0",
+                              },
+                            ]}
+                          />
+                        ))}
+                      </View>
+                      <Text
                         style={[
-                          styles.strengthBar,
+                          styles.strengthText,
+                          { color: passwordStrength.color },
+                        ]}
+                      >
+                        {passwordStrength.text}
+                      </Text>
+                    </View>
+                  )}
+
+                  <View style={styles.inputContainer}>
+                    <View style={styles.inputIconContainer}>
+                      <Ionicons
+                        name="shield-checkmark-outline"
+                        size={22}
+                        color="#2E7D32"
+                      />
+                    </View>
+                    <TextInput
+                      style={styles.input}
+                      placeholder="Confirm Password"
+                      placeholderTextColor="#999"
+                      value={confirmPassword}
+                      onChangeText={setConfirmPassword}
+                      secureTextEntry={!showConfirmPassword}
+                      autoCapitalize="none"
+                    />
+                    <TouchableOpacity
+                      onPress={() => setShowConfirmPassword(!showConfirmPassword)}
+                      style={styles.eyeButton}
+                    >
+                      <Ionicons
+                        name={
+                          showConfirmPassword ? "eye-off-outline" : "eye-outline"
+                        }
+                        size={22}
+                        color="#666"
+                      />
+                    </TouchableOpacity>
+                  </View>
+
+                  {confirmPassword.length > 0 && (
+                    <View style={styles.matchContainer}>
+                      <Ionicons
+                        name={
+                          password === confirmPassword
+                            ? "checkmark-circle"
+                            : "close-circle"
+                        }
+                        size={18}
+                        color={password === confirmPassword ? "#4CAF50" : "#FF5252"}
+                      />
+                      <Text
+                        style={[
+                          styles.matchText,
                           {
-                            backgroundColor:
-                              passwordStrength.level >= level
-                                ? passwordStrength.color
-                                : "#E0E0E0",
+                            color:
+                              password === confirmPassword ? "#4CAF50" : "#FF5252",
                           },
                         ]}
-                      />
-                    ))}
-                  </View>
-                  <Text
-                    style={[
-                      styles.strengthText,
-                      { color: passwordStrength.color },
-                    ]}
-                  >
-                    {passwordStrength.text}
-                  </Text>
-                </View>
-              )}
+                      >
+                        {password === confirmPassword
+                          ? "Passwords match"
+                          : "Passwords don't match"}
+                      </Text>
+                    </View>
+                  )}
+                </>
+              ) : (
+                <>
+                  {!otpSent ? (
+                    <>
+                      <View style={styles.inputContainer}>
+                        <View style={styles.inputIconContainer}>
+                          <Ionicons name="phone-portrait-outline" size={22} color="#2E7D32" />
+                        </View>
+                        <TextInput
+                          style={styles.input}
+                          placeholder="+91 9876543210"
+                          placeholderTextColor="#999"
+                          value={phone}
+                          onChangeText={setPhone}
+                          keyboardType="phone-pad"
+                          autoCapitalize="none"
+                        />
+                      </View>
+                      <Text style={styles.phoneHintText}>
+                        Include your country code (e.g., +91 for India)
+                      </Text>
+                    </>
+                  ) : (
+                    <>
+                      <View style={styles.otpSentInfo}>
+                        <Ionicons name="checkmark-circle" size={20} color="#4CAF50" />
+                        <Text style={styles.otpSentText}>
+                          OTP sent to {phone}
+                        </Text>
+                        <TouchableOpacity onPress={() => {
+                          setOtpSent(false);
+                          setOtp("");
+                        }}>
+                          <Text style={styles.editPhoneText}>Edit</Text>
+                        </TouchableOpacity>
+                      </View>
 
-              <View style={styles.inputContainer}>
-                <View style={styles.inputIconContainer}>
-                  <Ionicons
-                    name="shield-checkmark-outline"
-                    size={22}
-                    color="#2E7D32"
-                  />
-                </View>
-                <TextInput
-                  style={styles.input}
-                  placeholder="Confirm Password"
-                  placeholderTextColor="#999"
-                  value={confirmPassword}
-                  onChangeText={setConfirmPassword}
-                  secureTextEntry={!showConfirmPassword}
-                  autoCapitalize="none"
-                />
-                <TouchableOpacity
-                  onPress={() => setShowConfirmPassword(!showConfirmPassword)}
-                  style={styles.eyeButton}
-                >
-                  <Ionicons
-                    name={
-                      showConfirmPassword ? "eye-off-outline" : "eye-outline"
-                    }
-                    size={22}
-                    color="#666"
-                  />
-                </TouchableOpacity>
-              </View>
+                      <View style={styles.inputContainer}>
+                        <View style={styles.inputIconContainer}>
+                          <Ionicons name="keypad-outline" size={22} color="#2E7D32" />
+                        </View>
+                        <TextInput
+                          style={styles.input}
+                          placeholder="Enter OTP"
+                          placeholderTextColor="#999"
+                          value={otp}
+                          onChangeText={setOtp}
+                          keyboardType="numeric"
+                          maxLength={6}
+                        />
+                      </View>
 
-              {confirmPassword.length > 0 && (
-                <View style={styles.matchContainer}>
-                  <Ionicons
-                    name={
-                      password === confirmPassword
-                        ? "checkmark-circle"
-                        : "close-circle"
-                    }
-                    size={18}
-                    color={password === confirmPassword ? "#4CAF50" : "#FF5252"}
-                  />
-                  <Text
-                    style={[
-                      styles.matchText,
-                      {
-                        color:
-                          password === confirmPassword ? "#4CAF50" : "#FF5252",
-                      },
-                    ]}
-                  >
-                    {password === confirmPassword
-                      ? "Passwords match"
-                      : "Passwords don't match"}
-                  </Text>
-                </View>
+                      <View style={styles.resendContainer}>
+                        {resendTimer > 0 ? (
+                          <Text style={styles.resendText}>
+                            Resend OTP in {resendTimer}s
+                          </Text>
+                        ) : (
+                          <TouchableOpacity onPress={handleSendPhoneOtp}>
+                            <Text style={styles.resendLink}>Resend OTP</Text>
+                          </TouchableOpacity>
+                        )}
+                      </View>
+                    </>
+                  )}
+                </>
               )}
 
               <TouchableOpacity
@@ -357,15 +525,21 @@ export default function SignUpScreen() {
               <TouchableOpacity
                 style={[
                   styles.signupButton,
-                  !isFormValid && styles.signupButtonDisabled,
+                  !(registerMethod === 'email' ? isEmailFormValid : isPhoneFormValid) && styles.signupButtonDisabled,
                 ]}
-                onPress={handleSignUp}
-                disabled={!isFormValid || isLoading}
+                onPress={
+                  registerMethod === 'email'
+                    ? handleSignUp
+                    : otpSent
+                    ? handleVerifyPhoneOtp
+                    : handleSendPhoneOtp
+                }
+                disabled={!(registerMethod === 'email' ? isEmailFormValid : isPhoneFormValid) || isLoading}
                 activeOpacity={0.8}
               >
                 <LinearGradient
                   colors={
-                    isFormValid
+                    (registerMethod === 'email' ? isEmailFormValid : isPhoneFormValid)
                       ? ["#2E7D32", "#1B5E20"]
                       : ["#A5D6A7", "#A5D6A7"]
                   }
@@ -378,7 +552,7 @@ export default function SignUpScreen() {
                   ) : (
                     <>
                       <Text style={styles.signupButtonText}>
-                        Create Account
+                        {registerMethod === 'email' ? 'Create Account' : otpSent ? 'Verify & Create Account' : 'Send OTP'}
                       </Text>
                       <Ionicons name="arrow-forward" size={20} color="#fff" />
                     </>
@@ -400,6 +574,21 @@ export default function SignUpScreen() {
                 <Text style={styles.loginLink}>Sign In</Text>
               </TouchableOpacity>
             </Animated.View>
+
+            <View style={styles.toggleRegisterMethod}>
+              <TouchableOpacity onPress={toggleRegisterMethod} style={styles.toggleButton}>
+                <Ionicons 
+                  name={registerMethod === 'email' ? 'phone-portrait-outline' : 'mail-outline'} 
+                  size={18} 
+                  color="#2E7D32" 
+                />
+                <Text style={styles.toggleRegisterMethodText}>
+                  {registerMethod === 'email' 
+                    ? ' Register with Phone instead' 
+                    : ' Register with Email instead'}
+                </Text>
+              </TouchableOpacity>
+            </View>
           </ScrollView>
         </KeyboardAvoidingView>
       </LinearGradient>
@@ -416,18 +605,18 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     flexGrow: 1,
-    paddingHorizontal: 24,
-    paddingBottom: 40,
+    paddingHorizontal: responsiveSize(24, 0.06),
+    paddingBottom: responsiveHeight(40, 0.05),
   },
 
   header: {
-    paddingTop: 50,
-    paddingBottom: 10,
+    paddingTop: responsiveHeight(50, 0.06),
+    paddingBottom: responsiveHeight(10, 0.015),
   },
   backButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
+    width: responsiveSize(44, 0.11),
+    height: responsiveSize(44, 0.11),
+    borderRadius: responsiveSize(12, 0.03),
     backgroundColor: "rgba(255, 255, 255, 0.8)",
     justifyContent: "center",
     alignItems: "center",
@@ -459,16 +648,16 @@ const styles = StyleSheet.create({
   },
 
   formSection: {
-    marginBottom: 20,
+    marginBottom: responsiveHeight(20, 0.025),
   },
   inputContainer: {
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: "#fff",
-    borderRadius: 16,
-    marginBottom: 14,
-    paddingHorizontal: 16,
-    height: 58,
+    borderRadius: responsiveSize(16, 0.04),
+    marginBottom: responsiveHeight(14, 0.018),
+    paddingHorizontal: responsiveSize(16, 0.04),
+    height: responsiveHeight(58, 0.072),
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.08,
@@ -476,9 +665,9 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   inputIconContainer: {
-    width: 38,
-    height: 38,
-    borderRadius: 10,
+    width: responsiveSize(38, 0.095),
+    height: responsiveSize(38, 0.095),
+    borderRadius: responsiveSize(10, 0.025),
     backgroundColor: "rgba(46, 125, 50, 0.1)",
     justifyContent: "center",
     alignItems: "center",
@@ -486,7 +675,7 @@ const styles = StyleSheet.create({
   },
   input: {
     flex: 1,
-    fontSize: 16,
+    fontSize: responsiveSize(16, 0.04),
     color: "#333",
     fontWeight: "500",
   },
@@ -497,7 +686,7 @@ const styles = StyleSheet.create({
   strengthContainer: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 14,
+    marginBottom: responsiveHeight(14, 0.018),
     marginTop: -8,
     paddingHorizontal: 4,
   },
@@ -507,38 +696,45 @@ const styles = StyleSheet.create({
     marginRight: 10,
   },
   strengthBar: {
-    width: 40,
+    width: responsiveSize(40, 0.1),
     height: 4,
     borderRadius: 2,
   },
   strengthText: {
-    fontSize: 12,
+    fontSize: responsiveSize(12, 0.03),
     fontWeight: "600",
   },
 
   matchContainer: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 14,
+    marginBottom: responsiveHeight(14, 0.018),
     marginTop: -8,
     paddingHorizontal: 4,
     gap: 6,
   },
   matchText: {
-    fontSize: 12,
+    fontSize: responsiveSize(12, 0.03),
     fontWeight: "600",
+  },
+  phoneHintText: {
+    fontSize: responsiveSize(12, 0.03),
+    color: "#666",
+    fontWeight: "500",
+    marginBottom: responsiveHeight(14, 0.018),
+    paddingHorizontal: 4,
   },
 
   termsContainer: {
     flexDirection: "row",
     alignItems: "flex-start",
-    marginBottom: 20,
+    marginBottom: responsiveHeight(20, 0.025),
     paddingHorizontal: 4,
   },
   checkbox: {
-    width: 24,
-    height: 24,
-    borderRadius: 6,
+    width: responsiveSize(24, 0.06),
+    height: responsiveSize(24, 0.06),
+    borderRadius: responsiveSize(6, 0.015),
     borderWidth: 2,
     borderColor: "#2E7D32",
     justifyContent: "center",
@@ -551,7 +747,7 @@ const styles = StyleSheet.create({
   },
   termsText: {
     flex: 1,
-    fontSize: 14,
+    fontSize: responsiveSize(14, 0.035),
     color: "#666",
     lineHeight: 20,
     fontWeight: "500",
@@ -562,7 +758,7 @@ const styles = StyleSheet.create({
   },
 
   signupButton: {
-    borderRadius: 16,
+    borderRadius: responsiveSize(16, 0.04),
     overflow: "hidden",
     shadowColor: "#2E7D32",
     shadowOffset: { width: 0, height: 8 },
@@ -577,12 +773,12 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 18,
+    paddingVertical: responsiveHeight(18, 0.025),
     gap: 10,
   },
   signupButtonText: {
     color: "#fff",
-    fontSize: 18,
+    fontSize: responsiveSize(18, 0.045),
     fontWeight: "700",
     letterSpacing: 0.5,
   },
@@ -592,16 +788,76 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     marginTop: "auto",
-    paddingTop: 16,
+    paddingTop: responsiveHeight(16, 0.02),
   },
   loginText: {
-    fontSize: 16,
+    fontSize: responsiveSize(16, 0.04),
     color: "#666",
     fontWeight: "500",
   },
   loginLink: {
-    fontSize: 16,
+    fontSize: responsiveSize(16, 0.04),
     color: "#2E7D32",
     fontWeight: "700",
+  },
+
+  // Phone registration styles
+  otpSentInfo: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: responsiveHeight(20, 0.025),
+    paddingVertical: responsiveHeight(12, 0.018),
+    backgroundColor: "rgba(76, 175, 80, 0.1)",
+    borderRadius: responsiveSize(12, 0.03),
+  },
+  otpSentText: {
+    fontSize: responsiveSize(14, 0.035),
+    color: "#2E7D32",
+    fontWeight: "600",
+    marginHorizontal: 8,
+  },
+  editPhoneText: {
+    fontSize: responsiveSize(13, 0.032),
+    color: "#1565C0",
+    fontWeight: "600",
+    textDecorationLine: "underline",
+  },
+  resendContainer: {
+    alignItems: "center",
+    marginBottom: responsiveHeight(20, 0.025),
+  },
+  resendText: {
+    fontSize: responsiveSize(14, 0.035),
+    color: "#666",
+    fontWeight: "500",
+  },
+  resendLink: {
+    fontSize: responsiveSize(14, 0.035),
+    color: "#2E7D32",
+    fontWeight: "600",
+    textDecorationLine: "underline",
+  },
+
+  // Toggle button styles
+  toggleRegisterMethod: {
+    alignSelf: "center",
+    marginTop: responsiveHeight(20, 0.025),
+    marginBottom: responsiveHeight(10, 0.015),
+  },
+  toggleButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: responsiveHeight(10, 0.015),
+    paddingHorizontal: responsiveSize(16, 0.04),
+    backgroundColor: "rgba(46, 125, 50, 0.1)",
+    borderRadius: responsiveSize(12, 0.03),
+  },
+  toggleRegisterMethodText: {
+    fontSize: responsiveSize(14, 0.035),
+    color: "#2E7D32",
+    fontWeight: "600",
+    marginLeft: 8,
   },
 });

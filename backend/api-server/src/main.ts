@@ -1,19 +1,27 @@
-import { ValidationPipe } from '@nestjs/common';
+import { Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
-
-  // Enable CORS for mobile app
-  app.enableCors({
-    origin: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
-    credentials: true,
+  // Create application
+  const app = await NestFactory.create(AppModule, {
+    logger: ['error', 'warn', 'log'],
   });
 
-  app.useGlobalPipes(new ValidationPipe());
-  await app.listen(process.env.PORT ?? 3000);
+  // Enable CORS for all origins
+  app.enableCors();
+
+  // Set global prefix for API routes
+  app.setGlobalPrefix('api');
+
+  // Determine the appropriate host to listen on
+  const host = process.env.HOST || '0.0.0.0';
+  const port = process.env.PORT || 3000;
+
+  // Start the application
+  await app.listen(port, host);
+
+  Logger.log(`🚀 Application is running on: http://${host}:${port}`);
 }
+
 bootstrap();

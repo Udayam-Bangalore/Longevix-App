@@ -172,7 +172,7 @@ export default function MealDetailsScreen() {
             </View>
           ) : (
             meal.items.map((item: FoodItem, index: number) => (
-              <View key={item.id || index} style={styles.foodItemCard}>
+              <View key={item.id || `item-${index}-${item.name}-${item.quantity}`} style={styles.foodItemCard}>
                 <View style={styles.foodItemInfo}>
                   <Text style={styles.foodItemName}>{item.name}</Text>
                   <Text style={styles.foodItemQuantity}>
