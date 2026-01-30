@@ -719,7 +719,7 @@ export default function DashboardScreen() {
             <View style={styles.logoCircle}>
               <View style={styles.logoInner}>
                 <Image 
-                  source={require("@/assets/images/LongevixLogoOnly.png")} 
+                  source={require("@/assets/images/logo.png")} 
                   style={styles.logoImage}
                   resizeMode="contain"
                 />
@@ -852,7 +852,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    paddingBottom: 100,
+    paddingBottom: 150,
   },
 
   

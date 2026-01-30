@@ -10,7 +10,7 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
-  View
+  View,
 } from "react-native";
 
 import { useAuth } from "@/src/contexts/auth.context";
@@ -22,26 +22,44 @@ export default function WelcomeScreen() {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(50)).current;
   const scaleAnim = useRef(new Animated.Value(0.8)).current;
+  const pulseAnim = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
+    // Entry animations
     Animated.parallel([
       Animated.timing(fadeAnim, {
         toValue: 1,
-        duration: 800,
+        duration: 1000,
         useNativeDriver: true,
       }),
       Animated.timing(slideAnim, {
         toValue: 0,
-        duration: 800,
+        duration: 1000,
         useNativeDriver: true,
       }),
       Animated.spring(scaleAnim, {
         toValue: 1,
-        tension: 50,
-        friction: 7,
+        tension: 40,
+        friction: 6,
         useNativeDriver: true,
       }),
     ]).start();
+
+    // Continuous pulse animation for logo
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, {
+          toValue: 1.05,
+          duration: 2000,
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulseAnim, {
+          toValue: 1,
+          duration: 2000,
+          useNativeDriver: true,
+        }),
+      ])
+    ).start();
   }, []);
 
   const handleGetStarted = async () => {
@@ -51,84 +69,102 @@ export default function WelcomeScreen() {
 
   return (
     <>
-      <StatusBar barStyle="dark-content" />
+      <StatusBar barStyle="light-content" />
       <LinearGradient
-        colors={["#0EA684", "#FFFFFF"]}
+        colors={["#064E3B", "#065F46", "#047857", "#059669"]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={styles.gradientContainer}
       >
+        {/* Background decorative elements */}
+        <View style={styles.decorativeCircle1} />
+        <View style={styles.decorativeCircle2} />
+        <View style={styles.decorativeCircle3} />
+        <View style={styles.glowEffect} />
+
         <View style={styles.content}>
-        {/* Logo/Icon Section */}
-        <Animated.View
-          style={[
-            styles.logoContainer,
-            {
-              opacity: fadeAnim,
-              transform: [{ scale: scaleAnim }],
-            },
-          ]}
-        >
-          <View style={styles.iconCircle}>
-            <View style={styles.iconInner}>
-              <Image 
-                source={require("@/assets/images/Longevix.png")} 
-                style={styles.logoImage}
-                resizeMode="contain"
-              />
-            </View>
-          </View>
-          <Text style={styles.appName}>Longevix</Text>
-          <Text style={styles.tagline}>Your Smart Nutrition Assistant</Text>
-        </Animated.View>
-
-        {/* Features Section */}
-        <Animated.View
-          style={[
-            styles.featuresContainer,
-            {
-              opacity: fadeAnim,
-              transform: [{ translateY: slideAnim }],
-            },
-          ]}
-        >
-          <FeatureItem
-            icon="camera-outline"
-            title="AI Food Scanner"
-            text="Instantly analyze any meal with our advanced AI"
-          />
-          <FeatureItem
-            icon="analytics-outline"
-            title="Smart Tracking"
-            text="Monitor your nutrition with detailed insights"
-          />
-          <FeatureItem
-            icon="trophy-outline"
-            title="Personal Goals"
-            text="Achieve your health goals with guided plans"
-          />
-        </Animated.View>
-
-        {/* CTA Buttons */}
-        <Animated.View
-          style={[
-            styles.buttonContainer,
-            {
-              opacity: fadeAnim,
-              transform: [{ translateY: slideAnim }],
-            },
-          ]}
-        >
-          <TouchableOpacity
-            style={styles.primaryButton}
-            onPress={handleGetStarted}
-            activeOpacity={0.8}
+          {/* Logo/Icon Section */}
+          <Animated.View
+            style={[
+              styles.logoContainer,
+              {
+                opacity: fadeAnim,
+                transform: [{ scale: scaleAnim }],
+              },
+            ]}
           >
-            <Text style={styles.primaryButtonText}>Get Started</Text>
-            <Ionicons name="arrow-forward" size={20} color="#2E7D32" />
-          </TouchableOpacity>
-        </Animated.View>
+            <Animated.View
+              style={[
+                styles.iconCircle,
+                { transform: [{ scale: pulseAnim }] },
+              ]}
+            >
+              <View style={styles.iconInner}>
+                <Image
+                  source={require("@/assets/images/logo.png")}
+                  style={styles.logoImage}
+                  contentFit="contain"
+                />
+              </View>
+            </Animated.View>
+            <Text style={styles.appName}>Longevix</Text>
+            <Text style={styles.tagline}>Your Smart Nutrition Companion</Text>
+          </Animated.View>
 
+          {/* Features Section */}
+          <Animated.View
+            style={[
+              styles.featuresContainer,
+              {
+                opacity: fadeAnim,
+                transform: [{ translateY: slideAnim }],
+              },
+            ]}
+          >
+            <FeatureItem
+              icon="chatbubble-ellipses-outline"
+              title="AI Nutrition Coach"
+              text="Chat with our AI to get personalized meal plans and nutrition advice tailored to your goals"
+            />
+            <FeatureItem
+              icon="trending-up-outline"
+              title="Smart Insights"
+              text="Visualize your progress with beautiful charts and personalized health recommendations"
+            />
+            <FeatureItem
+              icon="sparkles-outline"
+              title="Achieve Goals"
+              text="Set personalized targets and let our AI guide you to a healthier, longer life"
+            />
+          </Animated.View>
+
+          {/* CTA Buttons */}
+          <Animated.View
+            style={[
+              styles.buttonContainer,
+              {
+                opacity: fadeAnim,
+                transform: [{ translateY: slideAnim }],
+              },
+            ]}
+          >
+            <TouchableOpacity
+              style={styles.primaryButton}
+              onPress={handleGetStarted}
+              activeOpacity={0.85}
+            >
+              <LinearGradient
+                colors={["#FFFFFF", "#F9FAFB", "#F3F4F6"]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.buttonGradient}
+              >
+                <Text style={styles.primaryButtonText}>Get Started</Text>
+                <Ionicons name="arrow-forward" size={20} color="#059669" />
+              </LinearGradient>
+            </TouchableOpacity>
+
+          </Animated.View>
         </View>
       </LinearGradient>
     </>
@@ -145,25 +181,17 @@ const FeatureItem = ({
   text: string;
 }) => (
   <View style={styles.featureItem}>
-    <LinearGradient
-      colors={["rgba(255, 255, 255, 0.3)", "rgba(255, 255, 255, 0.1)"]}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 1, y: 1 }}
-      style={styles.featureGradient}
-    >
+    <View style={styles.featureContent}>
       <View style={styles.featureIconContainer}>
-        <LinearGradient
-          colors={["#2E7D32", "#1B5E20"]}
-          style={styles.featureIconGradient}
-        >
-          <Ionicons name={icon} size={24} color="#fff" />
-        </LinearGradient>
+        <View style={styles.featureIconCircle}>
+          <Ionicons name={icon} size={22} color="#FFFFFF" />
+        </View>
       </View>
       <View style={styles.featureTextContainer}>
         <Text style={styles.featureTitle}>{title}</Text>
         <Text style={styles.featureText}>{text}</Text>
       </View>
-    </LinearGradient>
+    </View>
   </View>
 );
 
@@ -173,137 +201,181 @@ const styles = StyleSheet.create({
     width: width,
     height: height,
   },
+  decorativeCircle1: {
+    position: "absolute",
+    width: width * 0.9,
+    height: width * 0.9,
+    borderRadius: width * 0.45,
+    backgroundColor: "rgba(16, 185, 129, 0.08)",
+    top: -width * 0.25,
+    right: -width * 0.25,
+  },
+  decorativeCircle2: {
+    position: "absolute",
+    width: width * 0.7,
+    height: width * 0.7,
+    borderRadius: width * 0.35,
+    backgroundColor: "rgba(5, 150, 105, 0.06)",
+    bottom: height * 0.12,
+    left: -width * 0.2,
+  },
+  decorativeCircle3: {
+    position: "absolute",
+    width: width * 0.5,
+    height: width * 0.5,
+    borderRadius: width * 0.25,
+    backgroundColor: "rgba(16, 185, 129, 0.04)",
+    top: height * 0.35,
+    right: -width * 0.15,
+  },
+  glowEffect: {
+    position: "absolute",
+    width: width * 0.6,
+    height: width * 0.6,
+    borderRadius: width * 0.3,
+    backgroundColor: "rgba(16, 185, 129, 0.15)",
+    top: height * 0.15,
+    left: width * 0.2,
+    filter: "blur(60px)",
+  },
   content: {
     flex: 1,
     justifyContent: "space-between",
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 30,
-    gap: 15,
+    paddingHorizontal: 24,
+    paddingTop: 60,
+    paddingBottom: 40,
+    gap: 20,
     maxHeight: height,
   },
   logoContainer: {
     alignItems: "center",
-    marginTop: 20,
+    marginTop: 10,
   },
   iconCircle: {
-    width: Math.min(110, width * 0.25),
-    height: Math.min(110, width * 0.25),
-    borderRadius: Math.min(55, width * 0.125),
-    backgroundColor: "rgba(255, 255, 255, 0.25)",
+    width: Math.min(120, width * 0.28),
+    height: Math.min(120, width * 0.28),
+    borderRadius: Math.min(60, width * 0.14),
+    backgroundColor: "rgba(255, 255, 255, 0.15)",
     justifyContent: "center",
     alignItems: "center",
-    marginBottom: Math.min(24, width * 0.06),
-    borderWidth: 2,
-    borderColor: "rgba(255, 255, 255, 0.4)",
+    marginBottom: 20,
+    borderWidth: 1.5,
+    borderColor: "rgba(255, 255, 255, 0.3)",
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 8 },
+    shadowOffset: { width: 0, height: 12 },
     shadowOpacity: 0.3,
+    shadowRadius: 24,
+    elevation: 15,
+  },
+  iconInner: {
+    width: 84,
+    height: 84,
+    borderRadius: 42,
+    backgroundColor: "rgba(255, 255, 255, 0.95)",
+    justifyContent: "center",
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.25,
     shadowRadius: 12,
     elevation: 10,
   },
-  iconInner: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: "#fff",
-    justifyContent: "center",
-    alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 5,
-  },
   appName: {
-    fontSize: Math.min(42, width * 0.08),
-    fontWeight: "800",
-    color: "#333",
+    fontSize: Math.min(44, width * 0.09),
+    fontWeight: "900",
+    color: "#FFFFFF",
     marginBottom: 8,
-    letterSpacing: 1,
-    textShadowColor: "rgba(0, 0, 0, 0.1)",
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
+    letterSpacing: 1.5,
+    textShadowColor: "rgba(0, 0, 0, 0.2)",
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 8,
   },
   tagline: {
     fontSize: 16,
-    color: "#666",
+    color: "rgba(255, 255, 255, 0.75)",
     textAlign: "center",
-    fontWeight: "500",
-    letterSpacing: 0.5,
+    fontWeight: "600",
+    letterSpacing: 0.8,
   },
   logoImage: {
-    width: 60,
-    height: 60,
+    width: 56,
+    height: 56,
   },
   featuresContainer: {
-    gap: 20,
+    gap: 14,
+    marginTop: 20,
   },
   featureItem: {
     borderRadius: 20,
-    overflow: 'hidden',
+    backgroundColor: "rgba(255, 255, 255, 0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.2)",
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.3,
-    shadowRadius: 16,
-    elevation: 12,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    elevation: 6,
   },
-  featureGradient: {
+  featureContent: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: Math.min(20, width * 0.05),
-    paddingHorizontal: Math.min(20, width * 0.05),
-    borderRadius: 20,
+    paddingVertical: 18,
+    paddingHorizontal: 18,
   },
   featureIconContainer: {
-    marginRight: 16,
+    marginRight: 14,
   },
-  featureIconGradient: {
-    width: 56,
-    height: 56,
-    borderRadius: 16,
+  featureIconCircle: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: "rgba(16, 185, 129, 0.9)",
     justifyContent: "center",
     alignItems: "center",
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.3)",
   },
   featureTextContainer: {
     flex: 1,
   },
   featureTitle: {
-    fontSize: Math.min(18, width * 0.045),
+    fontSize: Math.min(15, width * 0.04),
     fontWeight: "700",
-    color: "#333",
-    marginBottom: 6,
+    color: "#FFFFFF",
+    marginBottom: 4,
+    letterSpacing: 0.2,
   },
   featureText: {
-    fontSize: Math.min(14, width * 0.035),
-    color: "#666",
+    fontSize: Math.min(13, width * 0.033),
+    color: "rgba(255, 255, 255, 0.75)",
     fontWeight: "500",
-    lineHeight: Math.min(20, width * 0.05),
+    lineHeight: Math.min(18, width * 0.045),
   },
   buttonContainer: {
-    gap: 14,
-    marginTop: 20,
+    gap: 16,
+    marginTop: 10,
   },
   primaryButton: {
-    backgroundColor: "#fff",
+    borderRadius: 20,
+    shadowColor: "#10B981",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.4,
+    shadowRadius: 20,
+    elevation: 12,
+    overflow: "hidden",
+  },
+  buttonGradient: {
     paddingVertical: 18,
     paddingHorizontal: 24,
-    borderRadius: 16,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 10,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.25,
-    shadowRadius: 10,
-    elevation: 10,
   },
   primaryButtonText: {
-    color: "#2E7D32",
+    color: "#059669",
     fontSize: 18,
-    fontWeight: "700",
+    fontWeight: "800",
     letterSpacing: 0.5,
   },
-
 });

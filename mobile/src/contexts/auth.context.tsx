@@ -1,10 +1,10 @@
 import { authService, User } from "@/src/services";
 import React, {
-    createContext,
-    ReactNode,
-    useContext,
-    useEffect,
-    useState,
+  createContext,
+  ReactNode,
+  useContext,
+  useEffect,
+  useState,
 } from "react";
 
 interface AuthContextType {
@@ -16,11 +16,16 @@ interface AuthContextType {
     username: string,
     email: string,
     password: string,
-  ) => Promise<void>;
+  ) => Promise<{ message: string; user?: any }>;
   logout: () => Promise<void>;
   checkAuth: () => Promise<void>;
   hasSeenWelcome: boolean;
   setHasSeenWelcome: () => Promise<void>;
+  sendPhoneOtp: (phone: string) => Promise<void>;
+  verifyPhoneOtp: (phone: string, token: string) => Promise<void>;
+  verifyPhoneAndSetUsername: (phone: string, token: string, username: string) => Promise<void>;
+  resendVerificationEmail: (email: string) => Promise<void>;
+  setUser: (user: User | null) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -47,6 +52,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
       if (isAuth) {
         const userData = await authService.getProfile();
+        console.log("User data from getProfile:", userData);
         setUser(userData);
       }
     } catch (error) {
@@ -68,16 +74,16 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
   };
 
-  const register = async (
+   const register = async (
     username: string,
     email: string,
     password: string,
   ) => {
     setIsLoading(true);
     try {
-      await authService.register({ username, email, password });
-      const userData = await authService.getProfile();
-      setUser(userData);
+      const result = await authService.register({ username, email, password });
+      // No user data is set - user must verify email first
+      return result;
     } finally {
       setIsLoading(false);
     }
@@ -98,6 +104,46 @@ export function AuthProvider({ children }: AuthProviderProps) {
     setHasSeenWelcomeState(true);
   };
 
+  const sendPhoneOtp = async (phone: string) => {
+    setIsLoading(true);
+    try {
+      await authService.sendPhoneOtp({ phone });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const verifyPhoneOtp = async (phone: string, token: string) => {
+    setIsLoading(true);
+    try {
+      await authService.verifyPhoneOtp({ phone, token });
+      const userData = await authService.getProfile();
+      setUser(userData);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const verifyPhoneAndSetUsername = async (phone: string, token: string, username: string) => {
+    setIsLoading(true);
+    try {
+      await authService.verifyPhoneAndSetUsername({ phone, token, username });
+      const userData = await authService.getProfile();
+      setUser(userData);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const resendVerificationEmail = async (email: string) => {
+    setIsLoading(true);
+    try {
+      await authService.resendVerificationEmail(email);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   useEffect(() => {
     checkAuth();
   }, []);
@@ -112,6 +158,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
     checkAuth,
     hasSeenWelcome,
     setHasSeenWelcome,
+    sendPhoneOtp,
+    verifyPhoneOtp,
+    verifyPhoneAndSetUsername,
+    resendVerificationEmail,
+    setUser,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

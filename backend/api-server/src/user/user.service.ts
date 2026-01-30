@@ -5,48 +5,32 @@ import {
   InternalServerErrorException,
   Logger,
 } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
-import { Model, Error as MongooseError } from 'mongoose';
-import { RegisterDto } from 'src/auth/dto/registerUser.dto';
-import { User, UserDocument } from './schemas/user.schema';
-
-interface MongoError extends Error {
-  code?: number;
-  keyPattern?: Record<string, unknown>;
-  keyValue?: Record<string, unknown>;
-}
-
-interface ValidationErrorItem {
-  message: string;
-  path?: string;
-  value?: unknown;
-}
-
-interface MongoValidationError extends Error {
-  errors?: Record<string, ValidationErrorItem>;
-}
+import { InjectRepository } from '@nestjs/typeorm';
+import { QueryFailedError, Repository } from 'typeorm';
+import { User } from './entities/user.entity';
 
 @Injectable()
 export class UserService {
   private readonly logger = new Logger(UserService.name);
 
-  constructor(@InjectModel(User.name) private userModal: Model<UserDocument>) {}
+  constructor(@InjectRepository(User) private userRepository: Repository<User>) {}
 
-  async createUser(registerUserDto: RegisterDto) {
+  async createUser(registerData: Partial<User>): Promise<User> {
     try {
-      // Validate input DTO
-      if (!registerUserDto) {
-        throw new BadRequestException('Registration data is required');
+      // Validate input data
+      if (!registerData || (!registerData.email && !registerData.username)) {
+        throw new BadRequestException('Email or username is required');
+      }
+
+      // Normalize phone number if provided
+      if (registerData.phone) {
+        registerData.phone = this.normalizePhoneNumber(registerData.phone);
       }
 
       // Create user
-      const user = await this.userModal.create({
-        username: registerUserDto.username,
-        email: registerUserDto.email,
-        password: registerUserDto.password,
-      });
+      const user = this.userRepository.create(registerData);
 
-      return user;
+      return await this.userRepository.save(user);
     } catch (err) {
       // Log the error for debugging
       const error = err as Error;
@@ -56,70 +40,28 @@ export class UserService {
         'createUser',
       );
 
-      // Handle MongoDB duplicate key error (E11000)
-      const mongoError = err as MongoError;
-      if (mongoError.code === 11000) {
-        const field = Object.keys(mongoError.keyPattern || {})[0] || 'field';
-        throw new ConflictException(`A user with this ${field} already exists`);
-      }
-
-      // Handle Mongoose validation errors
-      if (err instanceof MongooseError.ValidationError) {
-        const messages = Object.values(err.errors)
-          .map((e) => e.message)
-          .join(', ');
-        throw new BadRequestException(`Validation failed: ${messages}`);
-      }
-
-      // Handle Mongoose cast errors (invalid data type)
-      if (err instanceof MongooseError.CastError) {
-        throw new BadRequestException(`Invalid ${err.path}: ${err.value}`);
-      }
-
-      // Handle document validation errors
-      if (error.name === 'ValidationError') {
-        const validationError = err as MongoValidationError;
-        const messages = Object.values(validationError.errors || {})
-          .map((e) => e.message)
-          .join(', ');
-        throw new BadRequestException(messages || 'Invalid data provided');
-      }
-
-      // Handle connection errors
-      if (
-        error.name === 'MongooseServerSelectionError' ||
-        error.name === 'MongoNetworkError'
-      ) {
-        this.logger.error('Database connection error', error.stack);
-        throw new InternalServerErrorException(
-          'Database connection failed. Please try again later.',
-        );
-      }
-
-      // Handle timeout errors
-      if (error.name === 'MongooseTimeoutError') {
-        throw new InternalServerErrorException(
-          'Database operation timed out. Please try again.',
-        );
+      // Handle PostgreSQL unique constraint violation
+      if (err instanceof QueryFailedError && err.driverError.code === '23505') {
+        // Check which unique constraint is violated
+        if (registerData.email) {
+          const existingEmailUser = await this.findByEmail(registerData.email);
+          if (existingEmailUser) {
+            throw new ConflictException('A user with this email already exists');
+          }
+        }
+        if (registerData.phone) {
+          const existingPhoneUser = await this.findByPhone(registerData.phone);
+          if (existingPhoneUser) {
+            throw new ConflictException('A user with this phone number already exists');
+          }
+        }
+        // Fallback message if we can't determine which field caused the conflict
+        throw new ConflictException('A user with this email or phone number already exists');
       }
 
       // Handle NestJS HTTP exceptions (re-throw as-is)
       if ('status' in error && 'response' in error) {
         throw err;
-      }
-
-      // Handle out of memory errors
-      if (err instanceof RangeError || error.message.includes('memory')) {
-        this.logger.error('Memory error during user creation', error.stack);
-        throw new InternalServerErrorException(
-          'Unable to process request due to system constraints',
-        );
-      }
-
-      // Handle null/undefined model errors
-      if (!this.userModal) {
-        this.logger.error('User model is not initialized');
-        throw new InternalServerErrorException('Service configuration error');
       }
 
       // Catch-all for unexpected errors
@@ -136,23 +78,19 @@ export class UserService {
   /**
    * Find user by email with error handling
    */
-  async findByEmail(email: string): Promise<UserDocument | null> {
+  async findByEmail(email: string): Promise<User | null> {
     try {
       if (!email) {
-        throw new BadRequestException('Email is required');
+        return null;
       }
 
-      return await this.userModal.findOne({ email }).exec();
+      return await this.userRepository.findOne({ where: { email } });
     } catch (err) {
       const error = err as Error;
       this.logger.error(
         `Error finding user by email: ${error.message}`,
         error.stack,
       );
-
-      if (err instanceof MongooseError.CastError) {
-        throw new BadRequestException('Invalid email format');
-      }
 
       if ('status' in error && 'response' in error) {
         throw err;
@@ -167,23 +105,19 @@ export class UserService {
   /**
    * Find user by ID with error handling
    */
-  async findById(id: string): Promise<UserDocument | null> {
+  async findById(id: string): Promise<User | null> {
     try {
       if (!id) {
         throw new BadRequestException('User ID is required');
       }
 
-      return await this.userModal.findById(id).exec();
+      return await this.userRepository.findOne({ where: { id } });
     } catch (err) {
       const error = err as Error;
       this.logger.error(
         `Error finding user by ID: ${error.message}`,
         error.stack,
       );
-
-      if (err instanceof MongooseError.CastError) {
-        throw new BadRequestException('Invalid user ID format');
-      }
 
       if ('status' in error && 'response' in error) {
         throw err;
@@ -195,7 +129,74 @@ export class UserService {
     }
   }
 
-  async getUserById(id: string): Promise<UserDocument | null> {
-    return await this.userModal.findOne({ _id: id }).exec();
+  /**
+   * Normalize phone number to include country code prefix
+   * Removes any non-digit characters and ensures it starts with +
+   */
+  private normalizePhoneNumber(phone: string): string {
+    if (!phone) {
+      return '';
+    }
+    // Remove all non-digit characters
+    const digitsOnly = phone.replace(/[^0-9]/g, '');
+    // If number starts with 91 (India country code) without +, add it
+    if (digitsOnly.startsWith('91')) {
+      return `+${digitsOnly}`;
+    }
+    // If number doesn't have any country code, assume India (+91)
+    if (digitsOnly.length === 10) {
+      return `+91${digitsOnly}`;
+    }
+    // If number already has + prefix, return as is
+    if (phone.startsWith('+')) {
+      return phone;
+    }
+    // Default to adding + prefix
+    return `+${digitsOnly}`;
+  }
+
+  async findByPhone(phone: string): Promise<User | null> {
+    try {
+      if (!phone) {
+        throw new BadRequestException('Phone number is required');
+      }
+
+      const normalizedPhone = this.normalizePhoneNumber(phone);
+      return await this.userRepository.findOne({ where: { phone: normalizedPhone } });
+    } catch (err) {
+      const error = err as Error;
+      this.logger.error(
+        `Error finding user by phone: ${error.message}`,
+        error.stack,
+      );
+
+      if ('status' in error && 'response' in error) {
+        throw err;
+      }
+
+      throw new InternalServerErrorException(
+        'Error retrieving user information',
+      );
+    }
+  }
+
+  async getUserById(id: string): Promise<User | null> {
+    return await this.userRepository.findOne({ where: { id } });
+  }
+
+  async updateUser(id: string, updateData: Partial<User>): Promise<User> {
+    const user = await this.userRepository.findOne({ where: { id } });
+    
+    if (!user) {
+      throw new Error('User not found');
+    }
+
+    // Normalize phone number if provided
+    if (updateData.phone) {
+      updateData.phone = this.normalizePhoneNumber(updateData.phone);
+    }
+
+    Object.assign(user, updateData);
+    return await this.userRepository.save(user);
   }
 }

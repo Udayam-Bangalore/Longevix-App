@@ -113,7 +113,7 @@ export function MealsProvider({ children }: MealsProviderProps) {
 
   const mapApiMealToMeal = (apiMeal: ApiMeal): Meal => {
     return {
-      id: apiMeal._id,
+      id: apiMeal.id,
       name: apiMeal.name,
       items: apiMeal.items,
       calories: apiMeal.calories,

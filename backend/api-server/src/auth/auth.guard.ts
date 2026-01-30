@@ -4,27 +4,24 @@ import {
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
-import { JwtService } from '@nestjs/jwt';
 import { Request } from 'express';
-import { jwtConstants } from './constants';
+import { SupabaseService } from 'src/supabase/supabase.service';
 
 @Injectable()
 export class AuthGuard implements CanActivate {
-  constructor(private jwtService: JwtService) {}
+  constructor(private supabaseService: SupabaseService) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest();
     const token = this.extractTokenFromHeader(request);
     if (!token) {
-      throw new UnauthorizedException();
+      throw new UnauthorizedException('No token provided');
     }
     try {
-      const payload = await this.jwtService.verifyAsync(token, {
-        secret: jwtConstants.secret,
-      });
-      request['user'] = payload;
+      const user = await this.supabaseService.verifyToken(token);
+      request['user'] = user;
     } catch (error) {
-      console.error('JWT Verification Error:', error.message);
+      console.error('Supabase Token Verification Error:', error.message);
       throw new UnauthorizedException('Invalid or expired token');
     }
     return true;
