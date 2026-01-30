@@ -1,4 +1,5 @@
 import { useAuth } from "@/src/contexts/auth.context";
+import { useNavigationContainerRef } from "@/src/navigation";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
@@ -6,6 +7,7 @@ import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "rea
 
 export default function ProfileScreen() {
   const { logout, user } = useAuth();
+  const navigationRef = useNavigationContainerRef();
 
   const handleLogout = async () => {
     Alert.alert(
@@ -18,8 +20,15 @@ export default function ProfileScreen() {
           style: "destructive",
           onPress: async () => {
             await logout();
-            router.dismissAll();
-            router.replace("/(auth)/login");
+            // Reset navigation state to prevent race conditions
+            if (navigationRef.current) {
+              navigationRef.current.reset({
+                index: 0,
+                routes: [{ name: "(auth)/login" }],
+              });
+            } else {
+              router.replace("/(auth)/login");
+            }
           },
         },
       ]
@@ -38,7 +47,9 @@ export default function ProfileScreen() {
           </View>
           <View>
             <Text style={styles.userName}>{user?.username || "User"}</Text>
-            <Text style={styles.userEmail}>{user?.email || "your@email.com"}</Text>
+            <Text style={styles.userEmail}>
+              {user?.phone ? user.phone : user?.email || "your@email.com"}
+            </Text>
           </View>
         </View>
       </LinearGradient>

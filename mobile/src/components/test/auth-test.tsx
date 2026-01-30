@@ -1,6 +1,6 @@
+import { authService } from "@/src/services";
 import React, { useState } from "react";
-import { View, Text, TextInput, Button, Alert, StyleSheet } from "react-native";
-import { authService, RegisterData } from "@/src/services";
+import { Alert, Button, StyleSheet, Text, TextInput, View } from "react-native";
 
 export default function AuthTestComponent() {
   const [formData, setFormData] = useState({
@@ -14,10 +14,14 @@ export default function AuthTestComponent() {
   const handleRegister = async () => {
     setLoading(true);
     try {
-      const result = await authService.register(formData as RegisterData);
+      const result = await authService.register({
+        username: `${formData.fname} ${formData.lname}`,
+        email: formData.email,
+        password: formData.password,
+      });
       Alert.alert(
         "Success",
-        `User registered with token: ${result.accessToken.substring(0, 20)}...`,
+        `User registered: ${result.message}. Please check your email to verify your account.`,
       );
     } catch (error) {
       Alert.alert(

@@ -62,7 +62,7 @@ export default function PricingScreen() {
       >
         <TouchableOpacity 
           style={styles.backButton}
-          onPress={() => router.back()}
+          onPress={() => router.replace("/(tabs)")}
         >
           <Ionicons name="close" size={28} color="#FFF" />
         </TouchableOpacity>

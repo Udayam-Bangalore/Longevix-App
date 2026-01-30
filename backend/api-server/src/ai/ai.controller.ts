@@ -5,7 +5,7 @@ import { ChatDto } from './dto/chat.dto';
 import { GenerateNutrientDto } from './dto/generate-nutrient.dto';
 import { ProUserGuard } from './guards/pro-user.guard';
 
-@Controller('api/ai')
+@Controller('ai')
 export class AiController {
   constructor(private readonly aiService: AiService) {}
 
