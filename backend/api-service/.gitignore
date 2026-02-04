@@ -1,0 +1,101 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environment
+venv/
+env/
+ENV/
+.venv/
+
+# AI Model Files (NEVER commit these)
+*.safetensors
+*.pth
+*.ckpt
+*.bin
+*.onnx
+*.h5
+*.pb
+*.tflite
+
+# Model Directories
+models/
+checkpoints/
+weights/
+
+# Cache Files
+.cache/
+.cache_huggingface/
+__pycache__/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Temporary files
+*.tmp
+*.temp
+.lock
+
+# Jupyter Notebooks
+.ipynb_checkpoints/
+*.ipynb
+
+# pytest
+.pytest_cache/
+.coverage
+htmlcov/
+
+# MyPy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Pyright
+.pyright/
+
+# HuggingFace cache and model files
+*.json
+*.model
+tokenizers/
+runs/
+wandb/
+
+# Large binary files
+*.tar.gz
+*.zip
+*.rar
+*.7z
