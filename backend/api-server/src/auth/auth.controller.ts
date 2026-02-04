@@ -55,11 +55,8 @@ export class AuthController {
       throw new UnauthorizedException('Verify email first');
     }
 
-    // Check phone verification status (bypass for reviewer)
-    const phoneVerified = user?.phone_confirmed_at || isReviewer;
-    if (!phoneVerified) {
-      throw new UnauthorizedException('Verify phone first');
-    }
+    // Note: Phone verification is optional - users can login with email only
+    // Phone verification is only required for phone-based authentication
 
     return {
       message: 'User logged in successfully',
