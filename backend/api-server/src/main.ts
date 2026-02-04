@@ -1,6 +1,12 @@
 import { Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import * as crypto from 'crypto';
 import { AppModule } from './app.module';
+
+// Polyfill crypto for Node.js 18
+if (typeof globalThis.crypto === 'undefined') {
+  globalThis.crypto = crypto as any;
+}
 
 async function bootstrap() {
   // Create application
