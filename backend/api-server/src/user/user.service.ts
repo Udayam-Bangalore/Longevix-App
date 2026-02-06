@@ -209,4 +209,12 @@ export class UserService {
     Object.assign(user, updateData);
     return await this.userRepository.save(user);
   }
+
+  async incrementChatCount(id: string): Promise<void> {
+    const user = await this.userRepository.findOne({ where: { id } });
+    if (user) {
+      user.chatUsageCount = (user.chatUsageCount || 0) + 1;
+      await this.userRepository.save(user);
+    }
+  }
 }

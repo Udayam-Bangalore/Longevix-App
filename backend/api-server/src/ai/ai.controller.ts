@@ -17,10 +17,10 @@ import { ChatAgentDto } from './dto/chat-agent.dto';
 import { ChatDto } from './dto/chat.dto';
 import { GenerateNutrientDto } from './dto/generate-nutrient.dto';
 import { NutritionLookupDto } from './dto/nutrition-lookup.dto';
-import { ProUserGuard } from './guards/pro-user.guard';
-import { RDACalculationDto } from './dto/rda-calculation.dto';
 import { RagRetrieveDto } from './dto/rag-retrieve.dto';
+import { RDACalculationDto } from './dto/rda-calculation.dto';
 import { VisionAnalyzeDto } from './dto/vision-analyze.dto';
+import { ProUserGuard } from './guards/pro-user.guard';
 
 @Controller('ai')
 export class AiController {
@@ -31,7 +31,7 @@ export class AiController {
   ) {}
 
   @Post('chat')
-  @UseGuards(AuthGuard, ProUserGuard)
+  @UseGuards(AuthGuard, ChatLimitGuard)
   async chat(@Body() dto: ChatDto, @Request() req) {
     const userId = req.user?.id;
     const userEmail = req.user?.email;
@@ -99,7 +99,6 @@ export class AiController {
   }
 
   @Post('tools/nutrition/rda')
-  @UseGuards(AuthGuard)
   async calculateRDA(@Body() dto: RDACalculationDto) {
     return this.aiService.calculateRDA(dto.user_profile, dto.intake);
   }

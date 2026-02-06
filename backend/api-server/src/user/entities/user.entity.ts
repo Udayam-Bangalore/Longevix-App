@@ -51,6 +51,9 @@ export class User {
   @Column({ default: false })
   profileCompleted: boolean;
 
+  @Column({ default: 0 })
+  chatUsageCount: number;
+
   @CreateDateColumn()
   createdAt: Date;
 

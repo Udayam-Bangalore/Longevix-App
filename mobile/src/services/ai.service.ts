@@ -324,15 +324,12 @@ export const aiService = {
 
   async calculateRDA(data: RDACalculationRequest): Promise<RDACalculationResponse> {
     try {
-      const token = await authService.getToken();
-
       const response = await fetch(
         `${API_CONFIG.BASE_URL}/${API_CONFIG.ENDPOINTS.AI.TOOLS.NUTRITION_RDA}`,
         {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
           },
           body: JSON.stringify(data),
         }
