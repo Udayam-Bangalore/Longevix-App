@@ -423,7 +423,7 @@ export default function AddFoodScreen() {
               clearForm();
               
               // Navigate to home screen with refresh parameter
-              router.push({ pathname: "/(tabs)", params: { t: Date.now().toString() } });
+              router.replace({ pathname: "/", params: { t: Date.now().toString() } });
             } catch (error: any) {
               setError(error.message || 'Failed to add foods. Please try again.');
             } finally {

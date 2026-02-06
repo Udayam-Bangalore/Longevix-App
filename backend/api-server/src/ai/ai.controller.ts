@@ -20,6 +20,7 @@ import { NutritionLookupDto } from './dto/nutrition-lookup.dto';
 import { RagRetrieveDto } from './dto/rag-retrieve.dto';
 import { RDACalculationDto } from './dto/rda-calculation.dto';
 import { VisionAnalyzeDto } from './dto/vision-analyze.dto';
+import { ChatLimitGuard } from './guards/chat-limit.guard';
 import { ProUserGuard } from './guards/pro-user.guard';
 
 @Controller('ai')

@@ -476,10 +476,18 @@ export default function DashboardScreen() {
   const params = useLocalSearchParams<{ t?: string }>();
   const { meals, loading, error, refreshMeals, clearErrors } = useMeals();
 
+  const lastRefreshParam = useRef<string | undefined>(params.t);
+  
   // Refresh meals when screen comes into focus or when timestamp changes
   useFocusEffect(
     useCallback(() => {
-      refreshMeals();
+      const currentT = params.t;
+      
+      // Refresh if it's the first load or if t parameter changed
+      if (!lastRefreshParam.current || currentT !== lastRefreshParam.current) {
+        refreshMeals();
+        lastRefreshParam.current = currentT;
+      }
     }, [refreshMeals, params.t])
   );
 

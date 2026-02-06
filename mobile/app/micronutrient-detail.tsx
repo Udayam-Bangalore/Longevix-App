@@ -521,6 +521,15 @@ Example format:
 
     const baseRDA = baseRDAs[nutrientKey] || 100;
 
+    // Return base RDA if user is not available
+    if (!user) {
+      return {
+        target: Math.round(baseRDA),
+        unit: unit,
+        recommendation: "Complete your profile for personalized RDA"
+      };
+    }
+
     // Adjust based on user profile
     let adjustedRDA = baseRDA;
     let recommendation = "Standard RDA";
@@ -534,7 +543,7 @@ Example format:
     }
 
     if (user.age) {
-      const age = parseInt(user.age, 10);
+      const age = parseInt(String(user.age), 10);
       if (age > 50) {
         adjustedRDA *= 1.2;
         recommendation = "Increased for age 50+";
