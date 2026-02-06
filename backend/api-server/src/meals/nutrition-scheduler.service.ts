@@ -17,7 +17,9 @@ export class NutritionSchedulerService {
 
   @Cron('0 2 * * *')
   async aggregateDailyStats(): Promise<void> {
-    this.logger.log('Starting daily nutrition statistics aggregation for all users...');
+    this.logger.log(
+      'Starting daily nutrition statistics aggregation for all users...',
+    );
 
     try {
       const yesterday = new Date();
@@ -29,21 +31,28 @@ export class NutritionSchedulerService {
         .createQueryBuilder('meal')
         .select('DISTINCT meal.userId', 'userId')
         .where('meal.date >= :startDate', { startDate: yesterday })
-        .andWhere('meal.date < :endDate', { 
-          endDate: new Date(yesterday.getTime() + 24 * 60 * 60 * 1000) 
+        .andWhere('meal.date < :endDate', {
+          endDate: new Date(yesterday.getTime() + 24 * 60 * 60 * 1000),
         })
         .getRawMany();
 
       for (const { userId } of userIds) {
         try {
-          await this.nutritionAggregationService.aggregateDailyStats(userId, yesterday);
+          await this.nutritionAggregationService.aggregateDailyStats(
+            userId,
+            yesterday,
+          );
           this.logger.log(`Aggregated daily stats for user ${userId}`);
         } catch (error) {
-          this.logger.error(`Failed to aggregate daily stats for user ${userId}: ${error.message}`);
+          this.logger.error(
+            `Failed to aggregate daily stats for user ${userId}: ${error.message}`,
+          );
         }
       }
 
-      this.logger.log(`Daily nutrition statistics aggregation completed for ${userIds.length} users`);
+      this.logger.log(
+        `Daily nutrition statistics aggregation completed for ${userIds.length} users`,
+      );
     } catch (error) {
       this.logger.error(
         `Failed to aggregate daily nutrition statistics: ${error.message}`,
@@ -54,7 +63,9 @@ export class NutritionSchedulerService {
 
   @Cron('0 3 * * 0')
   async aggregateWeeklyStats(): Promise<void> {
-    this.logger.log('Starting weekly nutrition statistics aggregation for all users...');
+    this.logger.log(
+      'Starting weekly nutrition statistics aggregation for all users...',
+    );
 
     try {
       const lastSunday = new Date();
@@ -75,14 +86,21 @@ export class NutritionSchedulerService {
 
       for (const { userId } of userIds) {
         try {
-          await this.nutritionAggregationService.aggregateWeeklyStats(userId, lastSunday);
+          await this.nutritionAggregationService.aggregateWeeklyStats(
+            userId,
+            lastSunday,
+          );
           this.logger.log(`Aggregated weekly stats for user ${userId}`);
         } catch (error) {
-          this.logger.error(`Failed to aggregate weekly stats for user ${userId}: ${error.message}`);
+          this.logger.error(
+            `Failed to aggregate weekly stats for user ${userId}: ${error.message}`,
+          );
         }
       }
 
-      this.logger.log(`Weekly nutrition statistics aggregation completed for ${userIds.length} users`);
+      this.logger.log(
+        `Weekly nutrition statistics aggregation completed for ${userIds.length} users`,
+      );
     } catch (error) {
       this.logger.error(
         `Failed to aggregate weekly nutrition statistics: ${error.message}`,
@@ -93,7 +111,9 @@ export class NutritionSchedulerService {
 
   @Cron('0 4 1 * *')
   async aggregateMonthlyStats(): Promise<void> {
-    this.logger.log('Starting monthly nutrition statistics aggregation for all users...');
+    this.logger.log(
+      'Starting monthly nutrition statistics aggregation for all users...',
+    );
 
     try {
       const firstDayOfLastMonth = new Date();
@@ -114,14 +134,22 @@ export class NutritionSchedulerService {
 
       for (const { userId } of userIds) {
         try {
-          await this.nutritionAggregationService.aggregateMonthlyStats(userId, year, month);
+          await this.nutritionAggregationService.aggregateMonthlyStats(
+            userId,
+            year,
+            month,
+          );
           this.logger.log(`Aggregated monthly stats for user ${userId}`);
         } catch (error) {
-          this.logger.error(`Failed to aggregate monthly stats for user ${userId}: ${error.message}`);
+          this.logger.error(
+            `Failed to aggregate monthly stats for user ${userId}: ${error.message}`,
+          );
         }
       }
 
-      this.logger.log(`Monthly nutrition statistics aggregation completed for ${userIds.length} users`);
+      this.logger.log(
+        `Monthly nutrition statistics aggregation completed for ${userIds.length} users`,
+      );
     } catch (error) {
       this.logger.error(
         `Failed to aggregate monthly nutrition statistics: ${error.message}`,
@@ -136,7 +164,9 @@ export class NutritionSchedulerService {
 
     try {
       await this.nutritionAggregationService.cleanupOldData();
-      this.logger.log('Cleanup of old nutrition statistics data completed successfully');
+      this.logger.log(
+        'Cleanup of old nutrition statistics data completed successfully',
+      );
     } catch (error) {
       this.logger.error(
         `Failed to cleanup old nutrition statistics data: ${error.message}`,

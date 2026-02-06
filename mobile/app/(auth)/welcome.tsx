@@ -15,6 +15,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useAuth } from "@/src/contexts/auth.context";
+import { authService } from "@/src/services/auth.service";
 import { responsiveWidth, wp, hp } from "@/src/utils/responsive";
 
 const { width, height } = Dimensions.get("window");
@@ -65,8 +66,11 @@ export default function WelcomeScreen() {
   }, []);
 
   const handleGetStarted = async () => {
-    await setHasSeenWelcome();
-    router.push("/(auth)/onboarding");
+    setHasSeenWelcome();
+    await authService.setHasSeenWelcome();
+    setTimeout(() => {
+      router.replace("/(auth)/onboarding");
+    }, 150);
   };
 
   return (

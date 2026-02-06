@@ -1,7 +1,6 @@
 import {
   DEFAULT_MACRO_TARGETS,
   DEFAULT_MICRONUTRIENTS,
-  NUTRIENT_NAME_TO_KEY,
   RDA_VALUES,
 } from "@/src/constants";
 import { useAuth } from "@/src/contexts/auth.context";
@@ -11,12 +10,14 @@ import { Ionicons } from "@expo/vector-icons";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import { useFocusEffect } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
-import { useRouter } from "expo-router";
-import React, { useRef, useState } from "react";
+import { router, useLocalSearchParams, useRouter } from "expo-router";
+import React, { useCallback, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   Animated,
   Dimensions,
   Image,
+  RefreshControl,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -41,6 +42,7 @@ interface NutrientData {
   icon: string;
   iconColor: string;
   iconBg: string;
+  description: string;
 }
 
 
@@ -53,7 +55,10 @@ const FORMATTED_DATE = CURRENT_DATE.toLocaleDateString("en-US", {
 });
 
 // Use default micronutrients from constants
-const MICRONUTRIENTS: NutrientData[] = DEFAULT_MICRONUTRIENTS;
+const MICRONUTRIENTS: NutrientData[] = DEFAULT_MICRONUTRIENTS.map(nutrient => ({
+  ...nutrient,
+  status: 'low' as const,
+}));
 
 
 const CircularProgress: React.FC<{
@@ -230,6 +235,8 @@ const AskAISection: React.FC = () => {
 
 
 const NutrientCard: React.FC<{ nutrient: NutrientData }> = ({ nutrient }) => {
+  const router = useRouter();
+  
   const getStatusColor = () => {
     switch (nutrient.status) {
       case "excellent":
@@ -261,8 +268,23 @@ const NutrientCard: React.FC<{ nutrient: NutrientData }> = ({ nutrient }) => {
     }
   };
 
+  const handlePress = () => {
+    router.push({
+      pathname: "/micronutrient-detail",
+      params: {
+        nutrientKey: nutrient.id,
+        name: nutrient.name,
+        value: nutrient.value.toString(),
+        percentage: nutrient.percentage.toString(),
+        unit: nutrient.unit,
+        rda: nutrient.rda,
+        description: nutrient.description || `${nutrient.name} is an essential nutrient for your health.`,
+      },
+    });
+  };
+
   return (
-    <View style={styles.nutrientCard}>
+    <TouchableOpacity style={styles.nutrientCard} onPress={handlePress} activeOpacity={0.7}>
       <View style={styles.nutrientCardContent}>
         
         <View
@@ -303,7 +325,7 @@ const NutrientCard: React.FC<{ nutrient: NutrientData }> = ({ nutrient }) => {
       <Text style={styles.nutrientResearch}>
         <MaterialCommunityIcons name="book-search" size={16} color="#666" /> Research
       </Text>
-    </View>
+    </TouchableOpacity>
   );
 };
 
@@ -406,33 +428,33 @@ const MealsSection: React.FC = () => {
     <View style={styles.mealsSection}>
       <Text style={styles.sectionTitle}>Today's Meals</Text>
       <View style={styles.mealsContainer}>
-        {meals.map((meal) => (
+        {meals?.map((meal) => (
           <TouchableOpacity 
-            key={meal.id} 
+            key={meal?.id} 
             style={styles.mealCard} 
             activeOpacity={0.7}
-            onPress={() => handleMealPress(meal.id)}
+            onPress={() => meal?.id && handleMealPress(meal.id)}
           >
-            <View style={[styles.mealIconContainer, { backgroundColor: meal.iconBg }]}>
-              <MaterialCommunityIcons name={meal.icon as any} size={28} color={meal.iconColor} />
+            <View style={[styles.mealIconContainer, { backgroundColor: meal?.iconBg }]}>
+              <MaterialCommunityIcons name={meal?.icon as any} size={28} color={meal?.iconColor} />
             </View>
             <View style={styles.mealInfo}>
-              <Text style={styles.mealName}>{meal.name}</Text>
+              <Text style={styles.mealName}>{meal?.name}</Text>
               <Text style={styles.mealDetails}>
-                {meal.items.length} items • {Math.round(Number(meal.calories) || 0)} cal
+                {meal?.items?.length} items • {Math.round(Number(meal?.calories) || 0)} cal
               </Text>
-              {meal.items.length > 0 && (
+              {meal?.items?.length > 0 && (
                 <View style={styles.mealMacrosPreview}>
                   <Text style={styles.mealMacroText}>
-                    P: {Math.round(meal.items.reduce((sum, item) => sum + (item.protein || 0), 0))}g
+                    P: {Math.round(meal?.items?.reduce((sum, item) => sum + (item?.protein || 0), 0) || 0)}g
                   </Text>
                   <Text style={styles.mealMacroDot}>•</Text>
                   <Text style={styles.mealMacroText}>
-                    C: {Math.round(meal.items.reduce((sum, item) => sum + (item.carbohydrates || 0), 0))}g
+                    C: {Math.round(meal?.items?.reduce((sum, item) => sum + (item?.carbohydrates || 0), 0) || 0)}g
                   </Text>
                   <Text style={styles.mealMacroDot}>•</Text>
                   <Text style={styles.mealMacroText}>
-                    F: {Math.round(meal.items.reduce((sum, item) => sum + (item.fat || 0), 0))}g
+                    F: {Math.round(meal?.items?.reduce((sum, item) => sum + (item?.fat || 0), 0) || 0)}g
                   </Text>
                 </View>
               )}
@@ -450,27 +472,33 @@ export default function DashboardScreen() {
   const insets = useSafeAreaInsets();
   const scrollY = useRef(new Animated.Value(0)).current;
   const [showAllNutrients, setShowAllNutrients] = useState(false);
-  const { meals, loading, error, refreshMeals } = useMeals();
+  const [refreshing, setRefreshing] = useState(false);
+  const params = useLocalSearchParams<{ t?: string }>();
+  const { meals, loading, error, refreshMeals, clearErrors } = useMeals();
 
-  // Refresh meals when screen comes into focus
+  // Refresh meals when screen comes into focus or when timestamp changes
   useFocusEffect(
-    React.useCallback(() => {
-      const timer = setTimeout(() => {
-        refreshMeals();
-      }, 100);
-      return () => clearTimeout(timer);
-    }, [refreshMeals])
+    useCallback(() => {
+      refreshMeals();
+    }, [refreshMeals, params.t])
   );
 
-  const totalCalories = meals.reduce(
-    (sum, meal) => sum + meal.items.reduce((itemSum, item) => itemSum + (item.calories || 0), 0),
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    clearErrors();
+    await refreshMeals();
+    setRefreshing(false);
+  }, [refreshMeals, clearErrors]);
+
+  const totalCalories = meals?.reduce(
+    (sum, meal) => sum + (meal?.items?.reduce((itemSum, item) => itemSum + (item?.calories || 0), 0) || 0),
     0
-  );
-  const totalItems = meals.reduce((sum, meal) => sum + meal.items.length, 0);
-  const totalProtein = meals.reduce(
-    (sum, meal) => sum + meal.items.reduce((itemSum, item) => itemSum + (item.protein || 0), 0),
+  ) || 0;
+  const totalItems = meals?.reduce((sum, meal) => sum + (meal?.items?.length || 0), 0) || 0;
+  const totalProtein = meals?.reduce(
+    (sum, meal) => sum + (meal?.items?.reduce((itemSum, item) => itemSum + (item?.protein || 0), 0) || 0),
     0
-  );
+  ) || 0;
   const NUTRIENT_SCORE = totalCalories > 0 ? Math.min(Math.round((totalCalories / DEFAULT_MACRO_TARGETS.calories) * 100), 100) : 0;
   
   const macroTargets = {
@@ -480,9 +508,9 @@ export default function DashboardScreen() {
 
   
   const totalMicronutrients: Record<string, number> = {};
-  meals.forEach(meal => {
-    if (meal.micronutrients) {
-      Object.entries(meal.micronutrients).forEach(([key, value]) => {
+  meals?.forEach(meal => {
+    if (meal?.micronutrients) {
+      Object.entries(meal?.micronutrients).forEach(([key, value]) => {
         if (!totalMicronutrients[key]) {
           totalMicronutrients[key] = 0;
         }
@@ -495,7 +523,7 @@ export default function DashboardScreen() {
 
   
   const updatedMicronutrients = MICRONUTRIENTS.map(nutrient => {
-    const key = NUTRIENT_NAME_TO_KEY[nutrient.name];
+    const key = nutrient.id;
     const value = totalMicronutrients[key] || 0;
     const rda = RDA_VALUES[key];
     const percentage = rda > 0 ? Math.min(Math.round((value / rda) * 100), 100) : 0;
@@ -522,6 +550,17 @@ export default function DashboardScreen() {
     setShowAllNutrients(!showAllNutrients);
   };
 
+  // Loading State
+  if (loading && meals?.length === 0) {
+    return (
+      <SafeAreaView style={[styles.container, styles.centerContent]} edges={["top", "left", "right"]}>
+        <StatusBar barStyle="dark-content" />
+        <ActivityIndicator size="large" color="#4CAF50" />
+        <Text style={styles.loadingText}>Loading your meals...</Text>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.container} edges={["top", "left", "right"]}>
       <StatusBar barStyle="dark-content" />
@@ -535,11 +574,29 @@ export default function DashboardScreen() {
           { useNativeDriver: false }
         )}
         scrollEventThrottle={16}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={["#4CAF50"]}
+            tintColor="#4CAF50"
+          />
+        }
       >
+        {/* Error Banner */}
+        {error && (
+          <View style={styles.errorBanner}>
+            <Ionicons name="warning-outline" size={20} color="#C62828" />
+            <Text style={styles.errorText} numberOfLines={2}>{error}</Text>
+            <TouchableOpacity onPress={onRefresh} style={styles.retryButton}>
+              <Text style={styles.retryText}>Retry</Text>
+            </TouchableOpacity>
+          </View>
+        )}
         
         <View style={styles.header}>
           <View>
-            <Text style={styles.appName}>NutriTrack</Text>
+            <Text style={styles.appName}>Longevix</Text>
             <Text style={styles.dateText}>{FORMATTED_DATE}</Text>
           </View>
           <View style={styles.logoContainer}>
@@ -639,7 +696,7 @@ export default function DashboardScreen() {
         <View style={styles.micronutrientsSection}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Micronutrients</Text>
-            <TouchableOpacity onPress={toggleShowAll}>
+            <TouchableOpacity onPress={() => router.push("/micronutrients")}>
               <Text style={styles.viewAllText}>
                 {showAllNutrients ? "Show Less" : "View All"}
               </Text>
@@ -652,7 +709,7 @@ export default function DashboardScreen() {
           ))}
 
 
-          {!showAllNutrients && MICRONUTRIENTS.length > 3 && (
+          {!showAllNutrients && MICRONUTRIENTS?.length > 3 && (
             <TouchableOpacity
               style={styles.showMoreButton}
               onPress={toggleShowAll}
@@ -681,6 +738,46 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#F5F5F5",
   },
+  centerContent: {
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 16,
+    color: "#666",
+    fontWeight: "500",
+  },
+  errorBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FFEBEE",
+    marginHorizontal: wp(4),
+    marginTop: hp(2),
+    padding: 16,
+    borderRadius: 12,
+    borderLeftWidth: 4,
+    borderLeftColor: "#C62828",
+  },
+  errorText: {
+    flex: 1,
+    marginLeft: 12,
+    fontSize: 14,
+    color: "#C62828",
+    fontWeight: "500",
+  },
+  retryButton: {
+    backgroundColor: "#C62828",
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+    marginLeft: 12,
+  },
+  retryText: {
+    color: "#FFF",
+    fontSize: 14,
+    fontWeight: "600",
+  },
   scrollView: {
     flex: 1,
   },
@@ -698,7 +795,6 @@ const styles = StyleSheet.create({
     paddingTop: 12,
     paddingHorizontal: 4,
     paddingBottom: 16,
-    backgroundColor: "#fff",
   },
   appName: {
     fontSize: 24,

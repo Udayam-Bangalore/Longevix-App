@@ -48,7 +48,9 @@ export class SupabaseService {
         throw error;
       }
 
-      this.logger.debug(`Token verified successfully for user: ${data.user?.id}`);
+      this.logger.debug(
+        `Token verified successfully for user: ${data.user?.id}`,
+      );
       return data.user;
     } catch (error) {
       this.logger.error(`Failed to verify token: ${error.message}`);
