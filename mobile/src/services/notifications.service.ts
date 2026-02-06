@@ -1,18 +1,33 @@
-import * as Notifications from 'expo-notifications';
+export async function configureNotifications() {
+  try {
+    const Notifications = await import('expo-notifications');
+    
+    Notifications.setNotificationHandler({
+      handleNotification: async () => ({
+        shouldShowAlert: true,
+        shouldPlaySound: true,
+        shouldSetBadge: false,
+        shouldShowBanner: true,
+        shouldShowList: true,
+      }),
+    });
+  } catch (error) {
+    // Notifications not available
+  }
+}
 
-export function configureNotifications() {
-  Notifications.setNotificationHandler({
-    handleNotification: async () => ({
-      shouldShowAlert: true,
-      shouldPlaySound: true,
-      shouldSetBadge: false,
-      shouldShowBanner: true,
-      shouldShowList: true,
-    }),
-  });
+async function getNotificationsModule(): Promise<typeof import('expo-notifications') | null> {
+  try {
+    return await import('expo-notifications');
+  } catch (error) {
+    return null;
+  }
 }
 
 export async function requestNotificationPermissions(): Promise<boolean> {
+  const Notifications = await getNotificationsModule();
+  if (!Notifications) return false;
+
   const { status: existingStatus } = await Notifications.getPermissionsAsync();
   let finalStatus = existingStatus;
 
@@ -25,6 +40,9 @@ export async function requestNotificationPermissions(): Promise<boolean> {
 }
 
 export async function checkNotificationPermissions(): Promise<boolean> {
+  const Notifications = await getNotificationsModule();
+  if (!Notifications) return false;
+
   const { status } = await Notifications.getPermissionsAsync();
   return status === 'granted';
 }
@@ -36,26 +54,27 @@ export async function scheduleDailyReminder(
   body: string
 ): Promise<string | null> {
   try {
+    const Notifications = await getNotificationsModule();
+    if (!Notifications) return null;
+
     const hasPermission = await checkNotificationPermissions();
     if (!hasPermission) {
       return null;
     }
-
-    const trigger: Notifications.DailyTriggerInput = {
-      type: Notifications.SchedulableTriggerInputTypes.DAILY,
-      hour,
-      minute,
-    };
 
     const identifier = await Notifications.scheduleNotificationAsync({
       content: {
         title,
         body,
         sound: true,
-        priority: Notifications.AndroidNotificationPriority.HIGH,
+        priority: 'high' as const,
         data: { type: 'daily_reminder' },
       },
-      trigger,
+      trigger: {
+        type: Notifications.SchedulableTriggerInputTypes.DAILY,
+        hour,
+        minute,
+      },
     });
 
     return identifier;
@@ -88,29 +107,41 @@ export async function scheduleDailyReminders(reminders: {
 }
 
 export async function cancelNotification(identifier: string): Promise<void> {
+  const Notifications = await getNotificationsModule();
+  if (!Notifications) return;
+  
   await Notifications.cancelScheduledNotificationAsync(identifier);
 }
 
 export async function cancelAllNotifications(): Promise<void> {
+  const Notifications = await getNotificationsModule();
+  if (!Notifications) return;
+  
   await Notifications.cancelAllScheduledNotificationsAsync();
 }
 
-export async function getScheduledNotifications(): Promise<Notifications.NotificationRequest[]> {
+export async function getScheduledNotifications() {
+  const Notifications = await getNotificationsModule();
+  if (!Notifications) return [];
+  
   return await Notifications.getAllScheduledNotificationsAsync();
 }
 
 export function addNotificationReceivedListener(
-  callback: (notification: Notifications.Notification) => void
-): Notifications.Subscription {
-  return Notifications.addNotificationReceivedListener(callback);
+  callback: (notification: any) => void
+) {
+  return {
+    remove: () => {},
+  };
 }
 
 export function addNotificationResponseListener(
-  callback: (response: Notifications.NotificationResponse) => void
-): Notifications.Subscription {
-  return Notifications.addNotificationResponseReceivedListener(callback);
+  callback: (response: any) => void
+) {
+  return {
+    remove: () => {},
+  };
 }
 
-export function removeNotificationSubscription(subscription: Notifications.Subscription): void {
-  // No-op in newer expo-notifications versions
+export function removeNotificationSubscription(subscription: any): void {
 }

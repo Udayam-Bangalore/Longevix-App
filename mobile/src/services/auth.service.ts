@@ -490,6 +490,37 @@ class AuthService {
       throw error;
     }
   }
+
+  async exchangeSupabaseToken(accessToken: string): Promise<AuthResponse> {
+    try {
+      const response = await fetch(
+        `${API_CONFIG.BASE_URL}/${API_CONFIG.ENDPOINTS.AUTH.EXCHANGE_SUPABASE_TOKEN}`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ accessToken }),
+        },
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || "Failed to exchange token");
+      }
+
+      const result = await response.json();
+
+      if (!result.accessToken || typeof result.accessToken !== 'string') {
+        throw new Error('Invalid token received from server');
+      }
+
+      await this.storeToken(result.accessToken, result.refreshToken || '');
+      return result;
+    } catch (error) {
+      throw error;
+    }
+  }
 }
 
 export const authService = new AuthService();

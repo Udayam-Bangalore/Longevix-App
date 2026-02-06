@@ -2,6 +2,7 @@ import { useAuth } from "@/src/contexts/auth.context";
 import { responsiveWidth, wp, hp } from "@/src/utils/responsive";
 import FontAwesome6 from "@expo/vector-icons/FontAwesome6";
 import { LinearGradient } from "expo-linear-gradient";
+import * as Linking from "expo-linking";
 import { router } from "expo-router";
 import React, { useCallback, useMemo, useRef, useState } from "react";
 import {
@@ -270,7 +271,20 @@ const BottomCTA: React.FC<{
     </TouchableOpacity>
     {isLastSlide && (
       <Text style={styles.termsText}>
-        By continuing, you agree to our Terms & Privacy Policy
+        By continuing, you agree to our{" "}
+        <Text 
+          style={styles.termsLink} 
+          onPress={() => Linking.openURL("https://udayam.co.in/terms-conditions")}
+        >
+          Terms & Conditions
+        </Text>{" "}
+        and{" "}
+        <Text 
+          style={styles.termsLink} 
+          onPress={() => Linking.openURL("https://udayam.co.in/privacy-policy")}
+        >
+          Privacy Policy
+        </Text>
       </Text>
     )}
   </View>
@@ -731,5 +745,13 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginTop: 12,
     fontWeight: "500",
+  },
+  termsLink: {
+    fontSize: responsiveSize(12, 0.03),
+    color: "#2E7D32",
+    textAlign: "center",
+    marginTop: 12,
+    fontWeight: "600",
+    textDecorationLine: "underline",
   },
 });
