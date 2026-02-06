@@ -30,7 +30,8 @@ export class AuthController {
   async register(@Body() registerUserDto: RegisterDto) {
     const result = await this.authService.registerUser(registerUserDto);
     return {
-      message: 'User registered successfully. Please check your email to verify your account.',
+      message:
+        'User registered successfully. Please check your email to verify your account.',
       user: result.data.user,
       // Do not return access token - user must verify email first
     };
@@ -71,11 +72,11 @@ export class AuthController {
   async getProfile(@Request() req) {
     // Try to find user by email (for email-based users), phone (for phone-based users), or by ID
     let user = await this.userService.findByEmail(req.user?.email);
-    
+
     if (!user && req.user?.phone) {
       user = await this.userService.findByPhone(req.user.phone);
     }
-    
+
     if (!user && req.user?.id) {
       user = await this.userService.findById(req.user.id);
     }
@@ -87,6 +88,7 @@ export class AuthController {
         username: req.user?.user_metadata?.username,
         email: req.user?.email,
         phone: req.user?.phone,
+        profileCompleted: false, // Explicitly set profileCompleted for new users
       });
     }
 
@@ -109,14 +111,17 @@ export class AuthController {
 
   @UseGuards(AuthGuard)
   @Put('profile')
-  async updateProfile(@Request() req, @Body() updateProfileDto: UpdateProfileDto) {
+  async updateProfile(
+    @Request() req,
+    @Body() updateProfileDto: UpdateProfileDto,
+  ) {
     // Try to find user by email (for email-based users), phone (for phone-based users), or by ID
     let user = await this.userService.findByEmail(req.user?.email);
-    
+
     if (!user && req.user?.phone) {
       user = await this.userService.findByPhone(req.user.phone);
     }
-    
+
     if (!user && req.user?.id) {
       user = await this.userService.findById(req.user.id);
     }
@@ -171,13 +176,13 @@ export class AuthController {
       verifyPhoneOtpDto.phone,
       verifyPhoneOtpDto.token,
     );
-    
+
     // Override Supabase's default "authenticated" role with "user"
     const user = result.data.user;
     if (user && user.role === 'authenticated') {
       user.role = 'user';
     }
-    
+
     return {
       message: 'Phone verified successfully',
       user,
@@ -188,7 +193,8 @@ export class AuthController {
 
   @Post('register-phone')
   async registerPhone(@Body() registerPhoneUserDto: RegisterPhoneUserDto) {
-    const result = await this.authService.registerPhoneUser(registerPhoneUserDto);
+    const result =
+      await this.authService.registerPhoneUser(registerPhoneUserDto);
     return {
       message: 'OTP sent successfully. Please verify with the code.',
       data: result,
@@ -196,19 +202,21 @@ export class AuthController {
   }
 
   @Post('verify-phone-and-set-username')
-  async verifyPhoneAndSetUsername(@Body() body: { phone: string; token: string; username: string }) {
+  async verifyPhoneAndSetUsername(
+    @Body() body: { phone: string; token: string; username: string },
+  ) {
     const result = await this.authService.verifyPhoneOtpAndSetUsername(
       body.phone,
       body.token,
       body.username,
     );
-    
+
     // Override Supabase's default "authenticated" role with "user"
     const user = result.data.user;
     if (user && user.role === 'authenticated') {
       user.role = 'user';
     }
-    
+
     return {
       message: 'Phone verified and username set successfully',
       user,
@@ -230,6 +238,47 @@ export class AuthController {
   async refreshToken(@Body() body: { refreshToken: string }) {
     const result = await this.authService.refreshToken(body.refreshToken);
     return result;
+  }
+
+  @Post('exchange-supabase-token')
+  async exchangeSupabaseToken(@Body() body: { accessToken: string }) {
+    const user = await this.authService.verifyToken(body.accessToken);
+
+    if (!user) {
+      throw new UnauthorizedException('Invalid or expired token');
+    }
+
+    if (!user.email_confirmed_at) {
+      throw new UnauthorizedException('Email not verified');
+    }
+
+    if (!user.email) {
+      throw new UnauthorizedException('Email not found in user data');
+    }
+
+    const dbUser = await this.userService.findByEmail(user.email);
+    const role = dbUser?.role || Role.User;
+
+    return {
+      message: 'Token exchanged successfully',
+      user: {
+        id: user.id,
+        email: user.email,
+        phone: user.phone,
+        username: user.user_metadata?.username,
+        role,
+        profileCompleted: dbUser?.profileCompleted || false,
+        age: dbUser?.age,
+        sex: dbUser?.sex,
+        height: dbUser?.height,
+        weight: dbUser?.weight,
+        activityLevel: dbUser?.activityLevel,
+        dietType: dbUser?.dietType,
+        primaryGoal: dbUser?.primaryGoal,
+      },
+      accessToken: body.accessToken,
+      refreshToken: null,
+    };
   }
 
   @UseGuards(AuthGuard)

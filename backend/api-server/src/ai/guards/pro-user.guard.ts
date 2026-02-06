@@ -16,7 +16,9 @@ export class ProUserGuard implements CanActivate {
     const user = request['user'];
 
     if (!user) {
-      throw new ForbiddenException('Only pro users and admins can access this endpoint');
+      throw new ForbiddenException(
+        'Only pro users and admins can access this endpoint',
+      );
     }
 
     // First, try to get role from database (same as /auth/profile does)
@@ -36,11 +38,14 @@ export class ProUserGuard implements CanActivate {
     }
 
     // Fallback to JWT claims if DB user not found
-    const userRole = user?.app_metadata?.role || user?.user_metadata?.role || user?.role;
+    const userRole =
+      user?.app_metadata?.role || user?.user_metadata?.role || user?.role;
     if (userRole === Role.ProUser || userRole === Role.Admin) {
       return true;
     }
 
-    throw new ForbiddenException('Only pro users and admins can access this endpoint');
+    throw new ForbiddenException(
+      'Only pro users and admins can access this endpoint',
+    );
   }
 }

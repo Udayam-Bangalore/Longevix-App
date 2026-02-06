@@ -1,5 +1,5 @@
 import { API_CONFIG } from '../config/api.config';
-import { authService } from './auth.service';
+import { APIInterceptor } from '../utils/api.interceptor';
 
 export interface DailyStats {
   id: string;
@@ -81,142 +81,122 @@ export interface NutritionSummary {
   last3Months: MonthlyStats[];
 }
 
-export const nutritionStatsService = {
+class NutritionStatsService {
   async getDailyStats(startDate?: string, endDate?: string): Promise<DailyStats[]> {
     try {
-      const token = await authService.getToken();
       const params = new URLSearchParams();
       if (startDate) params.append('startDate', startDate);
       if (endDate) params.append('endDate', endDate);
       
-      const response = await fetch(
+      const response = await APIInterceptor.fetchWithInterceptor(
         `${API_CONFIG.BASE_URL}/${API_CONFIG.ENDPOINTS.MEALS.STATS.DAILY}?${params.toString()}`,
         {
           method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
         }
       );
 
       if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
       }
 
       return await response.json();
-    } catch (error) {
+    } catch (error: any) {
+      console.error('[NutritionStatsService] getDailyStats error:', error);
       throw error;
     }
-  },
+  }
 
   async getWeeklyStats(startDate?: string, endDate?: string): Promise<WeeklyStats[]> {
     try {
-      const token = await authService.getToken();
       const params = new URLSearchParams();
       if (startDate) params.append('startDate', startDate);
       if (endDate) params.append('endDate', endDate);
 
-      const response = await fetch(
+      const response = await APIInterceptor.fetchWithInterceptor(
         `${API_CONFIG.BASE_URL}/${API_CONFIG.ENDPOINTS.MEALS.STATS.WEEKLY}?${params.toString()}`,
         {
           method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
         }
       );
 
       if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
       }
 
       return await response.json();
-    } catch (error) {
+    } catch (error: any) {
+      console.error('[NutritionStatsService] getWeeklyStats error:', error);
       throw error;
     }
-  },
+  }
 
   async getMonthlyStats(year?: number): Promise<MonthlyStats[]> {
     try {
-      const token = await authService.getToken();
       const params = new URLSearchParams();
       if (year) params.append('year', year.toString());
 
-      const response = await fetch(
+      const response = await APIInterceptor.fetchWithInterceptor(
         `${API_CONFIG.BASE_URL}/${API_CONFIG.ENDPOINTS.MEALS.STATS.MONTHLY}?${params.toString()}`,
         {
           method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
         }
       );
 
       if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
       }
 
       return await response.json();
-    } catch (error) {
+    } catch (error: any) {
+      console.error('[NutritionStatsService] getMonthlyStats error:', error);
       throw error;
     }
-  },
+  }
 
   async getNutritionSummary(): Promise<NutritionSummary> {
     try {
-      const token = await authService.getToken();
-      
-      const response = await fetch(
+      const response = await APIInterceptor.fetchWithInterceptor(
         `${API_CONFIG.BASE_URL}/${API_CONFIG.ENDPOINTS.MEALS.STATS.SUMMARY}`,
         {
           method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
         }
       );
 
       if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
       }
 
       return await response.json();
-    } catch (error) {
+    } catch (error: any) {
+      console.error('[NutritionStatsService] getNutritionSummary error:', error);
       throw error;
     }
-  },
+  }
 
   async triggerAggregation(): Promise<{ message: string }> {
     try {
-      const token = await authService.getToken();
-      
-      const response = await fetch(
+      const response = await APIInterceptor.fetchWithInterceptor(
         `${API_CONFIG.BASE_URL}/${API_CONFIG.ENDPOINTS.MEALS.STATS.AGGREGATE}`,
         {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
         }
       );
 
       if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
       }
 
       return await response.json();
-    } catch (error) {
+    } catch (error: any) {
+      console.error('[NutritionStatsService] triggerAggregation error:', error);
       throw error;
     }
-  },
-};
+  }
+}
+
+export const nutritionStatsService = new NutritionStatsService();
