@@ -1,0 +1,109 @@
+version: '3.8'
+
+services:
+  api-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: longevix-api-service
+    ports:
+      - "${API_SERVICE_PORT:-8000}:8000"
+    environment:
+      - ENVIRONMENT=production
+      - API_SERVICE_KEY=${API_SERVICE_KEY}
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
+      - MODEL_DEVICE=${MODEL_DEVICE:-cpu}
+      - HF_TOKEN=${HF_TOKEN}
+      - HF_TEXT_MODEL=${HF_TEXT_MODEL:-moonshotai/Kimi-K2-Instruct}
+      - HF_VISION_MODEL=${HF_VISION_MODEL:-llava-hf/llava-1.5-7b-hf}
+      - HF_INFERENCE_PROVIDER=${HF_INFERENCE_PROVIDER:-together}
+      - USDA_API_KEY=${USDA_API_KEY}
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_KEY=${SUPABASE_KEY}
+      - QDRANT_URL=${QDRANT_URL:-http://qdrant:6333}
+      - QDRANT_API_KEY=${QDRANT_API_KEY}
+      - LOG_LEVEL=${LOG_LEVEL:-WARNING}
+      - OPENAI_AGENTS_TRACING=${OPENAI_AGENTS_TRACING:-false}
+      - RATE_LIMIT_PER_MINUTE=${RATE_LIMIT_PER_MINUTE:-60}
+      - CORS_ORIGINS=${CORS_ORIGINS:-https://yourdomain.com}
+    depends_on:
+      redis:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+    deploy:
+      replicas: ${API_SERVICE_REPLICAS:-2}
+      resources:
+        limits:
+          cpus: '${API_SERVICE_CPU_LIMIT:-2}'
+          memory: '${API_SERVICE_MEMORY_LIMIT:-4G}'
+        reservations:
+          cpus: '${API_SERVICE_CPU_RESERVE:-1}'
+          memory: '${API_SERVICE_MEMORY_RESERVE:-2G}'
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health/live')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "5"
+
+  redis:
+    image: redis:7-alpine
+    container_name: longevix-redis
+    command: redis-server --requirepass ${REDIS_PASSWORD} --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+
+  qdrant:
+    image: qdrant/qdrant:v1.7.0
+    container_name: longevix-qdrant
+    ports:
+      - "${QDRANT_PORT:-6333}:6333"
+      - "${QDRANT_GRPC_PORT:-6334}:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    environment:
+      - QDRANT__SERVICE__HTTP_PORT=6333
+      - QDRANT__SERVICE__GRPC_PORT=6334
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6333/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+
+volumes:
+  redis_data:
+    driver: local
+  qdrant_data:
+    driver: local
+
+networks:
+  default:
+    name: longevix-network
+    driver: bridge

@@ -1,19 +1,44 @@
-fastapi
-uvicorn
-pydantic
-pydantic-settings
-torch
-transformers
-accelerate
-sentencepiece
-protobuf
-openai
-openai-agents
-litellm
-httpx
-python-multipart
-python-jose[cryptography]
-passlib[bcrypt]
-sentence-transformers
-python-dotenv
-requests
+# Core Framework
+fastapi>=0.109.0
+uvicorn[standard]>=0.27.0
+gunicorn>=21.2.0
+
+# Data Validation
+pydantic>=2.5.0
+pydantic-settings>=2.1.0
+
+# AI & ML
+torch>=2.1.0
+transformers>=4.36.0
+accelerate>=0.25.0
+sentencepiece>=0.1.99
+protobuf>=4.25.0
+openai>=1.12.0
+openai-agents>=0.0.1
+litellm>=1.35.0
+sentence-transformers>=2.2.2
+
+# HTTP & APIs
+httpx>=0.26.0
+requests>=2.31.0
+python-multipart>=0.0.6
+
+# Authentication
+python-jose[cryptography]>=3.3.0
+passlib[bcrypt]>=1.7.4
+
+# Redis for production sessions
+redis>=5.0.0
+
+# Rate limiting
+slowapi>=0.3.6
+
+# Monitoring
+prometheus-client>=0.19.0
+
+# Environment
+python-dotenv>=1.0.0
+
+# Development tools (optional)
+pytest>=7.4.0
+pytest-asyncio>=0.23.0

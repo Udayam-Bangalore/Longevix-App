@@ -28,6 +28,19 @@ ENV/
 
 # AI Model Files (NEVER commit these)
 *.safetensors
+
+# Environment (NEVER commit .env files!)
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+logs/
+
+# IDE
+.vscode/
+.idea/
 *.pth
 *.ckpt
 *.bin

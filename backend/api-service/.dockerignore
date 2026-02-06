@@ -1,0 +1,44 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.Python
+.env
+.venv
+env/
+venv/
+ENV/
+*.egg-info
+dist/
+build/
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# Testing
+.pytest_cache
+.coverage
+htmlcov/
+
+# Documentation
+*.md
+docs/
+
+# Local files
+*.log
+*.local
+.DS_Store
+
+# Don't ignore requirements
+!requirements.txt
+
+# Don't ignore .env.production template
+!.env.production
