@@ -3,13 +3,16 @@ import { aiService } from "@/src/services/ai.service";
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import { LinearGradient } from "expo-linear-gradient";
-import { useRouter } from "expo-router";
-import React, { useEffect, useRef, useState } from "react";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
   Animated,
   Image,
+  Keyboard,
+  KeyboardAvoidingView,
+  Platform,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -18,7 +21,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
 interface Message {
   id: number;
@@ -28,9 +31,105 @@ interface Message {
   image?: string | null;
 }
 
+// Response parser utility
+const parseAIResponse = (response: string): string => {
+  let cleaned = response;
+
+  // Remove common system prompt artifacts
+  const systemPatterns = [
+    /System prompt:.*$/gm,
+    /You are a.*$/gm,
+    /As an AI.*$/gm,
+    /Your role is.*$/gm,
+    /Context:.*$/gm,
+    /User profile:.*$/gm,
+    /Today's meals:.*$/gm,
+    /Remember to.*$/gm,
+    /Always.*$/gm,
+    /Important:.*$/gm,
+    /Note:.*$/gm,
+    /---+\s*$/gm,
+    /===+\s*$/gm,
+    /\*\*+/g, // Remove excessive asterisks
+    /_+/g,    // Remove excessive underscores
+  ];
+
+  for (const pattern of systemPatterns) {
+    cleaned = cleaned.replace(pattern, '');
+  }
+
+  // Clean up excessive whitespace
+  cleaned = cleaned.replace(/\n{3,}/g, '\n\n');
+  cleaned = cleaned.trim();
+
+  return cleaned;
+};
+
+// Bold text parser - converts **text** to proper bold formatting
+const parseBoldText = (text: string): Array<{ content: string; isBold: boolean }> => {
+  const parts: Array<{ content: string; isBold: boolean }> = [];
+  const regex = /\*\*(.*?)\*\*/g;
+  let lastIndex = 0;
+  let match;
+
+  while ((match = regex.exec(text)) !== null) {
+    // Add text before the match (not bold)
+    if (match.index > lastIndex) {
+      parts.push({
+        content: text.substring(lastIndex, match.index),
+        isBold: false,
+      });
+    }
+
+    // Add the bold text
+    parts.push({
+      content: match[1],
+      isBold: true,
+    });
+
+    lastIndex = regex.lastIndex;
+  }
+
+  // Add remaining text
+  if (lastIndex < text.length) {
+    parts.push({
+      content: text.substring(lastIndex),
+      isBold: false,
+    });
+  }
+
+  return parts;
+};
+
+// Component to render text with bold sections
+const BoldText = ({ text, style }: { text: string; style: any }) => {
+  const parts = parseBoldText(text);
+  
+  if (parts.length === 1 || parts.every(part => !part.isBold)) {
+    return <Text style={style}>{text}</Text>;
+  }
+
+  return (
+    <Text style={style}>
+      {parts.map((part, index) => (
+        <Text
+          key={index}
+          style={part.isBold ? { ...style, fontWeight: '700' } : style}
+        >
+          {part.content}
+        </Text>
+      ))}
+    </Text>
+  );
+};
+
 export default function ChatScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ prefill?: string; nutrientName?: string; nutrientKey?: string }>();
   const { user } = useAuth();
+  const insets = useSafeAreaInsets();
+  const scrollViewRef = useRef<ScrollView>(null);
+  
   const [messages, setMessages] = useState<Message[]>([
     {
       id: 1,
@@ -43,11 +142,183 @@ export default function ChatScreen() {
   const [inputText, setInputText] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const [initialQueryProcessed, setInitialQueryProcessed] = useState(false);
 
-  
+  const messagesRef = useRef(messages);
+  messagesRef.current = messages;
+
   const dot1Anim = useRef(new Animated.Value(0)).current;
   const dot2Anim = useRef(new Animated.Value(0)).current;
   const dot3Anim = useRef(new Animated.Value(0)).current;
+
+  const handleSend = useCallback(async (messageText?: string) => {
+    const textToSend = messageText || inputText;
+    if (!textToSend.trim() && !selectedImage) return;
+
+    const currentMessages = messagesRef.current;
+    const newMessage: Message = {
+      id: currentMessages.length + 1,
+      text: textToSend.trim() || (selectedImage ? "Check out this food image!" : ""),
+      sender: "user",
+      time: new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }),
+      image: selectedImage,
+    };
+    const updatedMessages = [...currentMessages, newMessage];
+    setMessages(updatedMessages);
+    setInputText("");
+    setSelectedImage(null);
+    setIsLoading(true);
+
+    // Scroll to bottom after sending
+    setTimeout(() => {
+      scrollViewRef.current?.scrollToEnd({ animated: true });
+    }, 100);
+
+    try {
+      if (user?.role === "admin" || user?.role === "prouser") {
+        let aiResponseText: string;
+        
+        if (selectedImage) {
+          aiResponseText = await aiService.chatWithImage(textToSend, selectedImage);
+        } else {
+          aiResponseText = await aiService.chat(textToSend);
+        }
+        
+        // Clean and parse the AI response
+        const cleanedResponse = parseAIResponse(aiResponseText);
+        
+        const aiResponse: Message = {
+          id: updatedMessages.length + 1,
+          text: cleanedResponse,
+          sender: "ai",
+          time: new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }),
+          image: null,
+        };
+        setMessages([...updatedMessages, aiResponse]);
+      } else {
+        setTimeout(() => {
+          const aiResponse: Message = {
+            id: updatedMessages.length + 1,
+            text: "This is a premium feature! Upgrade to Pro to access the full AI chat experience, including food image analysis.",
+            sender: "ai",
+            time: new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }),
+            image: null,
+          };
+          setMessages([...updatedMessages, aiResponse]);
+          // Scroll to bottom after AI response
+          setTimeout(() => {
+            scrollViewRef.current?.scrollToEnd({ animated: true });
+          }, 100);
+        }, 1000);
+      }
+    } catch (error) {
+      const errorResponse: Message = {
+        id: updatedMessages.length + 1,
+        text: "Sorry, there was an error processing your request. Please try again.",
+        sender: "ai",
+        time: new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }),
+        image: null,
+      };
+      setMessages([...updatedMessages, errorResponse]);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [inputText, selectedImage, user?.role]);
+
+  useEffect(() => {
+    if (params.prefill && !initialQueryProcessed) {
+      // Set flag first to prevent multiple triggers
+      setInitialQueryProcessed(true);
+      
+      // Create the user message immediately with research indicator
+      const userMessage: Message = {
+        id: 1,
+        text: params.prefill.trim(),
+        sender: "user",
+        time: new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }),
+        image: null,
+      };
+      
+      // Create a research loading indicator message
+      const isResearchQuery = params.prefill.includes("Research & Insights");
+      const loadingMessage: Message | null = isResearchQuery ? {
+        id: 2,
+        text: "🔍 Searching peer-reviewed research and analyzing your data...",
+        sender: "ai",
+        time: new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }),
+        image: null,
+      } : null;
+      
+      setMessages([userMessage, ...(loadingMessage ? [loadingMessage] : [])]);
+      setInputText("");
+      setIsLoading(true);
+
+      // Scroll to bottom
+      setTimeout(() => {
+        scrollViewRef.current?.scrollToEnd({ animated: true });
+      }, 100);
+
+      // Call API directly
+      const sendPrefillMessage = async () => {
+        try {
+          if ((user?.role === "admin" || user?.role === "prouser") && params.prefill) {
+            const aiResponseText = await aiService.chat(params.prefill);
+            const cleanedResponse = parseAIResponse(aiResponseText);
+            
+            const aiResponse: Message = {
+              id: 3,
+              text: cleanedResponse,
+              sender: "ai",
+              time: new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }),
+              image: null,
+            };
+            // Replace loading message with AI response
+            setMessages(prev => prev.filter(m => m.id !== 2).concat(aiResponse));
+          } else {
+            setTimeout(() => {
+              const aiResponse: Message = {
+                id: 3,
+                text: "This is a premium feature! Upgrade to Pro to access the full AI chat experience, including food image analysis.",
+                sender: "ai",
+                time: new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }),
+                image: null,
+              };
+              // Replace loading message with premium message
+              setMessages(prev => prev.filter(m => m.id !== 2).concat(aiResponse));
+              // Scroll to bottom after AI response
+              setTimeout(() => {
+                scrollViewRef.current?.scrollToEnd({ animated: true });
+              }, 100);
+            }, 1000);
+          }
+        } catch (error) {
+          const errorResponse: Message = {
+            id: 3,
+            text: "Sorry, there was an error processing your request. Please try again.",
+            sender: "ai",
+            time: new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }),
+            image: null,
+          };
+          // Replace loading message with error message
+          setMessages(prev => prev.filter(m => m.id !== 2).concat(errorResponse));
+        } finally {
+          setIsLoading(false);
+          // Scroll to bottom after AI response
+          setTimeout(() => {
+            scrollViewRef.current?.scrollToEnd({ animated: true });
+          }, 100);
+        }
+      };
+
+      // Small delay to ensure UI is ready (reduced for faster response)
+      const timer = setTimeout(() => {
+        sendPrefillMessage();
+      }, 50);
+
+      return () => clearTimeout(timer);
+    }
+  }, [params.prefill, initialQueryProcessed, user?.role]);
 
   useEffect(() => {
     if (isLoading) {
@@ -75,65 +346,31 @@ export default function ChatScreen() {
     }
   }, [isLoading]);
 
-  const handleSend = async () => {
-    if (inputText.trim() || selectedImage) {
-      const newMessage: Message = {
-        id: messages.length + 1,
-        text: inputText.trim() || (selectedImage ? "Check out this food image!" : ""),
-        sender: "user",
-        time: new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }),
-        image: selectedImage,
-      };
-      const updatedMessages = [...messages, newMessage];
-      setMessages(updatedMessages);
-      setInputText("");
-      setSelectedImage(null);
-      setIsLoading(true);
-
-      try {
-        if (user?.role === "admin" || user?.role === "prouser") {
-          let aiResponseText: string;
-          
-          if (selectedImage) {
-            aiResponseText = await aiService.chatWithImage(inputText, selectedImage);
-          } else {
-            aiResponseText = await aiService.chat(inputText);
-          }
-          
-          const aiResponse: Message = {
-            id: updatedMessages.length + 1,
-            text: aiResponseText,
-            sender: "ai",
-            time: new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }),
-            image: null,
-          };
-          setMessages([...updatedMessages, aiResponse]);
-        } else {
-          setTimeout(() => {
-            const aiResponse: Message = {
-              id: updatedMessages.length + 1,
-              text: "This is a premium feature! Upgrade to Pro to access the full AI chat experience, including food image analysis.",
-              sender: "ai",
-              time: new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }),
-              image: null,
-            };
-            setMessages([...updatedMessages, aiResponse]);
-          }, 1000);
-        }
-      } catch (error) {
-        const errorResponse: Message = {
-          id: updatedMessages.length + 1,
-          text: "Sorry, there was an error processing your request. Please try again.",
-          sender: "ai",
-          time: new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }),
-          image: null,
-        };
-        setMessages([...updatedMessages, errorResponse]);
-      } finally {
-        setIsLoading(false);
+  useEffect(() => {
+    const keyboardWillShow = Keyboard.addListener(
+      Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow",
+      (event) => {
+        const keyboardHeight = event.endCoordinates.height;
+        setKeyboardHeight(keyboardHeight);
+        // Scroll to bottom when keyboard shows
+        setTimeout(() => {
+          scrollViewRef.current?.scrollToEnd({ animated: true });
+        }, 100);
       }
-    }
-  };
+    );
+
+    const keyboardWillHide = Keyboard.addListener(
+      Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide",
+      () => {
+        setKeyboardHeight(0);
+      }
+    );
+
+    return () => {
+      keyboardWillShow.remove();
+      keyboardWillHide.remove();
+    };
+  }, []);
 
   const pickImage = async () => {
     try {
@@ -234,42 +471,100 @@ export default function ChatScreen() {
         end={{ x: 1, y: 1 }}
         style={styles.header}
       >
-        <View style={styles.headerContent}>
-          <View style={styles.headerLeft}>
-            <View style={styles.aiAvatarContainer}>
-              <LinearGradient
-                colors={["rgba(255,255,255,0.3)", "rgba(255,255,255,0.1)"]}
-                style={styles.aiAvatarBg}
-              >
-                <Ionicons name="sparkles" size={24} color="#fff" />
-              </LinearGradient>
+        <View style={styles.headerLeft}>
+          <View style={styles.iconContainer}>
+            <Ionicons name="sparkles" size={22} color="#FFF" style={styles.headerIcon} />
+          </View>
+          <View style={styles.headerTextContainer}>
+            <Text style={styles.headerTitle}>AI Nutrition Assistant</Text>
+            <View style={styles.headerSubtitleContainer}>
+              <View style={styles.greenDot} />
+              <Text style={styles.headerSubtitle}>Always here to help</Text>
             </View>
-            <View style={styles.headerText}>
-              <Text style={styles.headerTitle}>AI Nutrition Assistant</Text>
-              <View style={styles.statusContainer}>
-                <View style={styles.onlineIndicator} />
-                <Text style={styles.statusText}>Always here to help</Text>
-              </View>
+          </View>
+        </View>
+        <View style={styles.logoContainer}>
+          <View style={styles.logoCircle}>
+            <View style={styles.logoInner}>
+              <Image
+                source={require("@/assets/images/logo.png")}
+                style={styles.logoImage}
+                resizeMode="contain"
+              />
             </View>
           </View>
         </View>
       </LinearGradient>
 
-      {/* Chat Messages */}
-      <ScrollView
-        style={styles.messagesContainer}
-        contentContainerStyle={styles.messagesContent}
-        showsVerticalScrollIndicator={false}
+      {/* Main Content with KeyboardAvoidingView */}
+      <KeyboardAvoidingView
+        style={styles.keyboardContainer}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 60 : 0}
       >
-        {messages.map((message) => (
-          <View
-            key={message.id}
-            style={[
-              styles.messageWrapper,
-              message.sender === "user" ? styles.userMessageWrapper : styles.aiMessageWrapper,
-            ]}
-          >
-            {message.sender === "ai" && (
+        {/* Chat Messages */}
+        <ScrollView
+          ref={scrollViewRef}
+          style={styles.messagesContainer}
+          contentContainerStyle={styles.messagesContent}
+          showsVerticalScrollIndicator={false}
+          onContentSizeChange={() => scrollViewRef.current?.scrollToEnd({ animated: true })}
+          keyboardShouldPersistTaps="handled"
+        >
+          {messages.map((message) => (
+            <View
+              key={message.id}
+              style={[
+                styles.messageWrapper,
+                message.sender === "user" ? styles.userMessageWrapper : styles.aiMessageWrapper,
+              ]}
+            >
+              {message.sender === "ai" && (
+                <View style={styles.aiMessageAvatarContainer}>
+                  <LinearGradient
+                    colors={["#4CAF50", "#1A1A1A"]}
+                    style={styles.aiMessageAvatar}
+                  >
+                    <Ionicons name="sparkles" size={16} color="#fff" />
+                  </LinearGradient>
+                </View>
+              )}
+              <View
+                style={[
+                  styles.messageBubble,
+                  message.sender === "user" ? styles.userMessageBubble : styles.aiMessageBubble,
+                ]}
+              >
+                {message.image && (
+                  <Image source={{ uri: message.image }} style={styles.messageImage} resizeMode="cover" />
+                )}
+                {message.text ? (
+                  message.sender === "user" ? (
+                    <Text style={[styles.messageText, styles.userMessageText]}>
+                      {message.text}
+                    </Text>
+                  ) : (
+                    <BoldText
+                      text={message.text}
+                      style={[styles.messageText, styles.aiMessageText]}
+                    />
+                  )
+                ) : null}
+                <Text style={styles.messageTime}>{message.time}</Text>
+              </View>
+              {message.sender === "user" && (
+                <View style={styles.userMessageAvatarContainer}>
+                  <View style={styles.userMessageAvatar}>
+                    <Ionicons name="person" size={16} color="#fff" />
+                  </View>
+                </View>
+              )}
+            </View>
+          ))}
+
+          {/* Typing Indicator */}
+          {isLoading && (
+            <View style={[styles.messageWrapper, styles.aiMessageWrapper]}>
               <View style={styles.aiMessageAvatarContainer}>
                 <LinearGradient
                   colors={["#4CAF50", "#1A1A1A"]}
@@ -278,141 +573,110 @@ export default function ChatScreen() {
                   <Ionicons name="sparkles" size={16} color="#fff" />
                 </LinearGradient>
               </View>
-            )}
-            <View
-              style={[
-                styles.messageBubble,
-                message.sender === "user" ? styles.userMessageBubble : styles.aiMessageBubble,
-              ]}
-            >
-              {message.image && (
-                <Image source={{ uri: message.image }} style={styles.messageImage} resizeMode="cover" />
-              )}
-              {message.text ? (
-                <Text style={[styles.messageText, message.sender === "user" ? styles.userMessageText : styles.aiMessageText]}>
-                  {message.text}
-                </Text>
-              ) : null}
-              <Text style={styles.messageTime}>{message.time}</Text>
-            </View>
-            {message.sender === "user" && (
-              <View style={styles.userMessageAvatarContainer}>
-                <View style={styles.userMessageAvatar}>
-                  <Ionicons name="person" size={16} color="#fff" />
+              <View style={[styles.messageBubble, styles.aiMessageBubble]}>
+                <View style={styles.typingIndicator}>
+                  <Animated.View
+                    style={[
+                      styles.typingDot,
+                      { opacity: dot1Anim },
+                    ]}
+                  />
+                  <Animated.View
+                    style={[
+                      styles.typingDot,
+                      { opacity: dot2Anim },
+                    ]}
+                  />
+                  <Animated.View
+                    style={[
+                      styles.typingDot,
+                      { opacity: dot3Anim },
+                    ]}
+                  />
                 </View>
               </View>
-            )}
-          </View>
-        ))}
+            </View>
+          )}
 
-        {/* Typing Indicator */}
-        {isLoading && (
-          <View style={[styles.messageWrapper, styles.aiMessageWrapper]}>
-            <View style={styles.aiMessageAvatarContainer}>
+          {/* Premium Upgrade Prompt - Hide for admin and pro users */}
+          {user?.role !== "admin" && user?.role !== "prouser" && (
+            <View style={styles.premiumPromptContainer}>
               <LinearGradient
                 colors={["#4CAF50", "#1A1A1A"]}
-                style={styles.aiMessageAvatar}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.premiumPrompt}
               >
-                <Ionicons name="sparkles" size={16} color="#fff" />
+                <View style={styles.premiumPromptContent}>
+                  <View style={styles.premiumIconContainer}>
+                    <Ionicons name="star" size={32} color="#FFD700" />
+                  </View>
+                  <Text style={styles.premiumTitle}>Unlock Full AI Power</Text>
+                  <Text style={styles.premiumDescription}>
+                    Get personalized nutrition advice, meal recommendations, and answers to all your health questions.
+                  </Text>
+                  <TouchableOpacity
+                    style={styles.upgradeButton}
+                    activeOpacity={0.8}
+                    onPress={() => router.push("/pricing")}
+                  >
+                    <Text style={styles.upgradeButtonText}>Upgrade to Pro</Text>
+                    <Ionicons name="arrow-forward" size={16} color="#fff" />
+                  </TouchableOpacity>
+                </View>
               </LinearGradient>
             </View>
-            <View style={[styles.messageBubble, styles.aiMessageBubble]}>
-              <View style={styles.typingIndicator}>
-                <Animated.View
-                  style={[
-                    styles.typingDot,
-                    { opacity: dot1Anim },
-                  ]}
-                />
-                <Animated.View
-                  style={[
-                    styles.typingDot,
-                    { opacity: dot2Anim },
-                  ]}
-                />
-                <Animated.View
-                  style={[
-                    styles.typingDot,
-                    { opacity: dot3Anim },
-                  ]}
-                />
-              </View>
+          )}
+        </ScrollView>
+
+        {/* Input Area */}
+        <View style={[
+          styles.inputContainer, 
+          { 
+            paddingBottom: Platform.OS === "ios" ? insets.bottom + keyboardHeight + 8 : 16 + keyboardHeight / 2 
+          }
+        ]}>
+          {selectedImage && (
+            <View style={styles.imagePreviewContainer}>
+              <Image source={{ uri: selectedImage }} style={styles.imagePreview} resizeMode="cover" />
+              <TouchableOpacity style={styles.removeImageButton} onPress={removeSelectedImage}>
+                <Ionicons name="close-circle" size={24} color="#FF5252" />
+              </TouchableOpacity>
             </View>
-          </View>
-        )}
-
-        {/* Premium Upgrade Prompt - Hide for admin and pro users */}
-        {user?.role !== "admin" && user?.role !== "prouser" && (
-          <View style={styles.premiumPromptContainer}>
-            <LinearGradient
-              colors={["#4CAF50", "#1A1A1A"]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.premiumPrompt}
+          )}
+          <View style={styles.inputWrapper}>
+            <TouchableOpacity
+              style={styles.attachButton}
+              activeOpacity={0.8}
+              onPress={showImageOptions}
             >
-              <View style={styles.premiumPromptContent}>
-                <View style={styles.premiumIconContainer}>
-                  <Ionicons name="star" size={32} color="#FFD700" />
-                </View>
-                <Text style={styles.premiumTitle}>Unlock Full AI Power</Text>
-                <Text style={styles.premiumDescription}>
-                  Get personalized nutrition advice, meal recommendations, and answers to all your health questions.
-                </Text>
-                <TouchableOpacity
-                  style={styles.upgradeButton}
-                  activeOpacity={0.8}
-                  onPress={() => router.push("/pricing")}
-                >
-                  <Text style={styles.upgradeButtonText}>Upgrade to Pro</Text>
-                  <Ionicons name="arrow-forward" size={16} color="#fff" />
-                </TouchableOpacity>
-              </View>
-            </LinearGradient>
-          </View>
-        )}
-      </ScrollView>
-
-      {/* Input Area */}
-      <View style={styles.inputContainer}>
-        {selectedImage && (
-          <View style={styles.imagePreviewContainer}>
-            <Image source={{ uri: selectedImage }} style={styles.imagePreview} resizeMode="cover" />
-            <TouchableOpacity style={styles.removeImageButton} onPress={removeSelectedImage}>
-              <Ionicons name="close-circle" size={24} color="#FF5252" />
+              <Ionicons name="camera" size={22} color="#4CAF50" />
+            </TouchableOpacity>
+            <TextInput
+              style={styles.input}
+              placeholder={selectedImage ? "Add a comment about this food..." : "Type your question..."}
+              placeholderTextColor="#999"
+              value={inputText}
+              onChangeText={setInputText}
+              multiline
+              numberOfLines={4}
+              blurOnSubmit={false}
+            />
+            <TouchableOpacity
+              style={[styles.sendButton, (!inputText.trim() && !selectedImage || isLoading) && styles.sendButtonDisabled]}
+              activeOpacity={0.8}
+              onPress={() => handleSend()}
+              disabled={(!inputText.trim() && !selectedImage) || isLoading}
+            >
+              {isLoading ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <Ionicons name="send" size={20} color="#fff" />
+              )}
             </TouchableOpacity>
           </View>
-        )}
-        <View style={styles.inputWrapper}>
-          <TouchableOpacity
-            style={styles.attachButton}
-            activeOpacity={0.8}
-            onPress={showImageOptions}
-          >
-            <Ionicons name="camera" size={22} color="#4CAF50" />
-          </TouchableOpacity>
-          <TextInput
-            style={styles.input}
-            placeholder={selectedImage ? "Add a comment about this food..." : "Type your question..."}
-            placeholderTextColor="#999"
-            value={inputText}
-            onChangeText={setInputText}
-            multiline
-            numberOfLines={4}
-          />
-          <TouchableOpacity
-            style={[styles.sendButton, (!inputText.trim() && !selectedImage || isLoading) && styles.sendButtonDisabled]}
-            activeOpacity={0.8}
-            onPress={handleSend}
-            disabled={(!inputText.trim() && !selectedImage) || isLoading}
-          >
-            {isLoading ? (
-              <ActivityIndicator size="small" color="#fff" />
-            ) : (
-              <Ionicons name="send" size={20} color="#fff" />
-            )}
-          </TouchableOpacity>
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
@@ -422,48 +686,93 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#F8F9FA",
   },
+  keyboardContainer: {
+    flex: 1,
+  },
   header: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     paddingTop: 15,
     paddingBottom: 20,
     paddingHorizontal: 20,
     borderBottomLeftRadius: 24,
     borderBottomRightRadius: 24,
-    shadowColor: "#4CAF50",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 5,
-  },
-  headerContent: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
   },
   headerLeft: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
+    gap: 10,
   },
-  aiAvatarContainer: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    overflow: "hidden",
+  headerTextContainer: {
+    flexDirection: "column",
   },
-  aiAvatarBg: {
-    flex: 1,
+  headerSubtitleContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 2,
+  },
+  greenDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "#4CAF50",
+  },
+  headerSubtitle: {
+    fontSize: 13,
+    color: "rgba(255, 255, 255, 0.8)",
+    fontWeight: "500",
+  },
+  headerIcon: {
+    marginTop: 2,
+  },
+  iconContainer: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "rgba(255, 255, 255, 0.2)",
     justifyContent: "center",
     alignItems: "center",
-  },
-  headerText: {
-    flex: 1,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.3)",
   },
   headerTitle: {
-    fontSize: 18,
+    fontSize: 22,
     fontWeight: "800",
     color: "#FFF",
     letterSpacing: -0.5,
-    marginBottom: 4,
+  },
+  logoContainer: {
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  logoCircle: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: "rgba(255, 255, 255, 0.15)",
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.2)",
+  },
+  logoInner: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: "#fff",
+    justifyContent: "center",
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  logoImage: {
+    width: 32,
+    height: 32,
   },
   statusContainer: {
     flexDirection: "row",
@@ -486,7 +795,7 @@ const styles = StyleSheet.create({
   },
   messagesContent: {
     padding: 20,
-    paddingBottom: 80,
+    paddingBottom: 100,
   },
   messageWrapper: {
     flexDirection: "row",
@@ -541,6 +850,12 @@ const styles = StyleSheet.create({
   userMessageBubble: {
     backgroundColor: "#E0E0E0",
     borderTopRightRadius: 4,
+  },
+  messageImage: {
+    width: 200,
+    height: 150,
+    borderRadius: 12,
+    marginBottom: 8,
   },
   messageText: {
     fontSize: 15,
@@ -645,47 +960,30 @@ const styles = StyleSheet.create({
   },
   typingIndicator: {
     flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 8,
+    gap: 4,
   },
   typingDot: {
     width: 8,
     height: 8,
     borderRadius: 4,
     backgroundColor: "#999",
-    marginRight: 4,
-  },
-  messageImage: {
-    width: 200,
-    height: 150,
-    borderRadius: 12,
-    marginBottom: 8,
   },
   attachButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "#E8F5E9",
-    justifyContent: "center",
-    alignItems: "center",
-    marginRight: 8,
+    padding: 4,
   },
   imagePreviewContainer: {
-    flexDirection: "row",
-    alignItems: "center",
+    position: "relative",
     marginBottom: 8,
-    paddingHorizontal: 4,
   },
   imagePreview: {
-    width: 80,
+    width: 100,
     height: 80,
     borderRadius: 12,
-    borderWidth: 2,
-    borderColor: "#4CAF50",
   },
   removeImageButton: {
-    marginLeft: -12,
-    marginTop: -60,
+    position: "absolute",
+    top: -8,
+    right: -8,
     backgroundColor: "#FFF",
     borderRadius: 12,
   },

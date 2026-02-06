@@ -1,4 +1,4 @@
-import { FoodItem, useMeals } from "@/src/contexts/meals.context";
+import { useMeals } from "@/src/contexts/meals.context";
 import { Meal, mealsService } from "@/src/services/meals.service";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
@@ -116,6 +116,12 @@ export default function MealDetailsScreen() {
   );
 
   const fetchMealDetails = async () => {
+    if (!mealId || mealId === 'undefined') {
+      setError('Invalid meal ID');
+      setLoading(false);
+      return;
+    }
+    
     try {
       setLoading(true);
       setError(null);
@@ -350,53 +356,65 @@ export default function MealDetailsScreen() {
           <Text style={styles.sectionTitle}>
             {meal.items.length} {meal.items.length === 1 ? "Item" : "Items"}
           </Text>
-          {meal.items.length === 0 ? (
-            <View style={styles.emptyState}>
-              <MaterialCommunityIcons 
-                name="food-off-outline" 
-                size={48} 
-                color="#CCC" 
-              />
-              <Text style={styles.emptyStateText}>No items in this meal</Text>
-            </View>
-          ) : (
-            meal.items.map((item: FoodItem, index: number) => (
-              <View key={item.id || `item-${index}-${item.name}-${item.quantity}`} style={styles.foodItemCard}>
-                <View style={styles.foodItemInfo}>
-                  <Text style={styles.foodItemName}>{item.name}</Text>
-                  <Text style={styles.foodItemQuantity}>
-                    {item.quantity} {item.unit} • {Math.round(item.calories || 0)} cal
-                  </Text>
-                  {(item.protein || item.carbohydrates || item.fat) && (
-                    <View style={styles.foodItemMacros}>
-                      {item.protein ? (
-                        <View style={styles.macroTag}>
-                          <Text style={styles.macroTagText}>P: {Math.round(item.protein)}g</Text>
-                        </View>
-                      ) : null}
-                      {item.carbohydrates ? (
-                        <View style={styles.macroTag}>
-                          <Text style={styles.macroTagText}>C: {Math.round(item.carbohydrates)}g</Text>
-                        </View>
-                      ) : null}
-                      {item.fat ? (
-                        <View style={styles.macroTag}>
-                          <Text style={styles.macroTagText}>F: {Math.round(item.fat)}g</Text>
-                        </View>
-                      ) : null}
-                    </View>
-                  )}
-                </View>
-                <TouchableOpacity
-                  style={styles.removeButton}
-                  onPress={() => item.id && removeFoodItem(item.id)}
-                  activeOpacity={0.7}
-                >
-                  <Ionicons name="trash-outline" size={20} color="#FF5252" />
-                </TouchableOpacity>
+          {(meal.items ?? []).length === 0 ? (
+  <View style={styles.emptyState}>
+    <MaterialCommunityIcons
+      name="food-off-outline"
+      size={48}
+      color="#CCC"
+    />
+    <Text style={styles.emptyStateText}>No items in this meal</Text>
+  </View>
+) : (
+  (meal.items ?? []).map((item, index) => (
+    <View key={item.id ?? `${index}`} style={styles.foodItemCard}>
+      <View style={styles.foodItemInfo}>
+        <Text style={styles.foodItemName}>{item.name}</Text>
+
+        <Text style={styles.foodItemQuantity}>
+          {item.quantity} {item.unit} • {Math.round(item.calories ?? 0)} cal
+        </Text>
+
+        {(item.protein != null ||
+          item.carbohydrates != null ||
+          item.fat != null) && (
+          <View style={styles.foodItemMacros}>
+            {item.protein != null && (
+              <View style={styles.macroTag}>
+                <Text style={styles.macroTagText}>
+                  P: {Math.round(item.protein)}g
+                </Text>
               </View>
-            ))
-          )}
+            )}
+            {item.carbohydrates != null && (
+              <View style={styles.macroTag}>
+                <Text style={styles.macroTagText}>
+                  C: {Math.round(item.carbohydrates)}g
+                </Text>
+              </View>
+            )}
+            {item.fat != null && (
+              <View style={styles.macroTag}>
+                <Text style={styles.macroTagText}>
+                  F: {Math.round(item.fat)}g
+                </Text>
+              </View>
+            )}
+          </View>
+        )}
+      </View>
+
+      <TouchableOpacity
+        style={styles.removeButton}
+        onPress={() => item.id && removeFoodItem(item.id)}
+        activeOpacity={0.7}
+      >
+        <Ionicons name="trash-outline" size={20} color="#FF5252" />
+      </TouchableOpacity>
+    </View>
+  ))
+)}
+
         </View>
       </ScrollView>
     </SafeAreaView>

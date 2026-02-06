@@ -1,31 +1,28 @@
-import { Column, CreateDateColumn, Entity, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
+import {
+  Column,
+  CreateDateColumn,
+  Entity,
+  PrimaryGeneratedColumn,
+  UpdateDateColumn,
+} from 'typeorm';
 
 export class FoodItem {
-  @Column()
   name: string;
 
-  @Column()
-  quantity: string;
+  quantity: number;
 
-  @Column()
   unit: string;
 
-  @Column({ nullable: true })
   id?: string;
 
-  @Column({ type: 'decimal', precision: 10, scale: 2 })
   calories: number;
 
-  @Column({ type: 'decimal', precision: 10, scale: 2 })
   fat: number;
 
-  @Column({ type: 'decimal', precision: 10, scale: 2 })
   protein: number;
 
-  @Column({ type: 'decimal', precision: 10, scale: 2 })
   carbohydrates: number;
 
-  @Column('simple-json', { nullable: true, default: {} })
   micronutrients?: Record<string, number>;
 }
 

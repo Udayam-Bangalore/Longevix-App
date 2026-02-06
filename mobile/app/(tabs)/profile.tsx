@@ -4,13 +4,15 @@ import { useNavigationContainerRef } from "@/src/navigation";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
-import { Alert, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from "react-native";
+import { useState } from "react";
+import { Alert, Linking, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function ProfileScreen() {
   const { logout, user } = useAuth();
   const { hasPermission, isEnabled, enableNotifications, disableNotifications, requestPermission } = useNotifications();
   const navigationRef = useNavigationContainerRef();
+  const [settingsExpanded, setSettingsExpanded] = useState(false);
 
   const handleLogout = async () => {
     Alert.alert(
@@ -23,7 +25,6 @@ export default function ProfileScreen() {
           style: "destructive",
           onPress: async () => {
             await logout();
-            // Reset navigation state to prevent race conditions
             if (navigationRef.current) {
               navigationRef.current.reset({
                 index: 0,
@@ -36,6 +37,34 @@ export default function ProfileScreen() {
         },
       ]
     );
+  };
+
+  const handleToggleReminders = async (value: boolean) => {
+    if (value) {
+      if (!hasPermission) {
+        const granted = await requestPermission();
+        if (!granted) {
+          Alert.alert(
+            "Permission Required",
+            "Please enable notifications in your device settings to receive daily reminders."
+          );
+          return;
+        }
+      }
+      await enableNotifications();
+    } else {
+      await disableNotifications();
+    }
+  };
+
+  const handleHelpSupport = async () => {
+    const url = "https://udayam.co.in/#contact";
+    const supported = await Linking.canOpenURL(url);
+    if (supported) {
+      await Linking.openURL(url);
+    } else {
+      Alert.alert("Error", "Unable to open URL");
+    }
   };
 
   return (
@@ -83,40 +112,46 @@ export default function ProfileScreen() {
           </TouchableOpacity>
         )}
 
-        <TouchableOpacity style={styles.menuItem}>
-          <Ionicons name="settings-outline" size={24} color="#333" />
-          <Text style={styles.menuText}>Settings</Text>
-          <Ionicons name="chevron-forward" size={20} color="#CCC" style={styles.chevron} />
-        </TouchableOpacity>
+        <View style={styles.menuItem}>
+          <TouchableOpacity 
+            style={styles.settingsHeader}
+            onPress={() => setSettingsExpanded(!settingsExpanded)}
+          >
+            <Ionicons name="settings-outline" size={24} color="#333" />
+            <Text style={styles.menuText}>Settings</Text>
+            <Ionicons 
+              name={settingsExpanded ? "chevron-up" : "chevron-forward"} 
+              size={20} 
+              color="#CCC" 
+            />
+          </TouchableOpacity>
+        </View>
+
+        {settingsExpanded && (
+          <View style={styles.subMenuContainer}>
+            <TouchableOpacity 
+              style={[styles.menuItem, styles.subMenuItem]}
+              onPress={() => router.push("/(auth)/profile-setup?mode=edit")}
+            >
+              <Ionicons name="create-outline" size={22} color="#666" />
+              <Text style={[styles.menuText, styles.subMenuText]}>Edit Profile Data</Text>
+              <Ionicons name="chevron-forward" size={18} color="#CCC" />
+            </TouchableOpacity>
+          </View>
+        )}
 
         <View style={styles.menuItem}>
           <Ionicons name="notifications-outline" size={24} color="#333" />
           <Text style={styles.menuText}>Daily Reminders</Text>
           <Switch
             value={isEnabled}
-            onValueChange={async (value) => {
-              if (value) {
-                if (!hasPermission) {
-                  const granted = await requestPermission();
-                  if (!granted) {
-                    Alert.alert(
-                      "Permission Required",
-                      "Please enable notifications in your device settings to receive daily reminders."
-                    );
-                    return;
-                  }
-                }
-                await enableNotifications();
-              } else {
-                await disableNotifications();
-              }
-            }}
+            onValueChange={handleToggleReminders}
             trackColor={{ false: "#767577", true: "#4CAF50" }}
             thumbColor={isEnabled ? "#fff" : "#f4f3f4"}
           />
         </View>
 
-        <TouchableOpacity style={styles.menuItem}>
+        <TouchableOpacity style={styles.menuItem} onPress={handleHelpSupport}>
           <Ionicons name="help-circle-outline" size={24} color="#333" />
           <Text style={styles.menuText}>Help & Support</Text>
           <Ionicons name="chevron-forward" size={20} color="#CCC" style={styles.chevron} />
@@ -140,11 +175,9 @@ const styles = StyleSheet.create({
     backgroundColor: "#F5F5F5",
   },
   header: {
-    paddingTop: 20,
-    paddingBottom: 30,
+    paddingTop: 12,
+    paddingBottom: 16,
     paddingHorizontal: 20,
-    borderBottomLeftRadius: 24,
-    borderBottomRightRadius: 24,
   },
   profileHeader: {
     flexDirection: "row",
@@ -228,5 +261,21 @@ const styles = StyleSheet.create({
     color: "rgba(255, 255, 255, 0.8)",
     fontSize: 12,
     fontWeight: "600",
+  },
+  settingsHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    flex: 1,
+  },
+  subMenuContainer: {
+    marginLeft: 36,
+    gap: 8,
+  },
+  subMenuItem: {
+    backgroundColor: "#F8F8F8",
+  },
+  subMenuText: {
+    color: "#555",
   },
 });

@@ -1,5 +1,6 @@
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { AuthProvider, useAuth } from "@/src/contexts/auth.context";
+import { AppStateProvider } from "@/src/contexts/app-state.context";
 import { MealsProvider } from "@/src/contexts/meals.context";
 import { NotificationsProvider } from "@/src/contexts/notifications.context";
 import {
@@ -73,6 +74,12 @@ function RootLayoutNav() {
         router.replace("/(auth)/welcome");
       }
     } else if (isAuthenticated) {
+      // Check if we have user data
+      if (!user) {
+        // User is authenticated but user data not loaded yet, don't navigate
+        return;
+      }
+      
       // Check if profile is completed
       const isProfileCompleted = user?.profileCompleted || false;
       
@@ -91,7 +98,7 @@ function RootLayoutNav() {
       }
     } else {
       // User has seen welcome but not authenticated - go to login
-      if (!inAuthGroup || (inAuthGroup && currentScreen !== "login" && currentScreen !== "signup" && currentScreen !== "email-verification")) {
+      if (!inAuthGroup || (inAuthGroup && currentScreen !== "login" && currentScreen !== "signup" && currentScreen !== "email-verification" && currentScreen !== "onboarding")) {
         isNavigating.current = true;
         router.replace("/(auth)/login");
       }
@@ -105,6 +112,14 @@ function RootLayoutNav() {
           headerShown: false,
         }}
       >
+        {/* Auth callback page */}
+        <Stack.Screen
+          name="auth/callback"
+          options={{
+            headerShown: false,
+            gestureEnabled: false,
+          }}
+        />
         {/* Pricing page */}
         <Stack.Screen
           name="pricing"
@@ -130,13 +145,15 @@ function RootLayoutNav() {
 export default function RootLayout() {
   return (
     <SafeAreaProvider>
-      <AuthProvider>
-        <MealsProvider>
-          <NotificationsProvider>
-            <RootLayoutNav />
-          </NotificationsProvider>
-        </MealsProvider>
-      </AuthProvider>
+      <AppStateProvider>
+        <AuthProvider>
+          <MealsProvider>
+            <NotificationsProvider>
+              <RootLayoutNav />
+            </NotificationsProvider>
+          </MealsProvider>
+        </AuthProvider>
+      </AppStateProvider>
     </SafeAreaProvider>
   );
 }

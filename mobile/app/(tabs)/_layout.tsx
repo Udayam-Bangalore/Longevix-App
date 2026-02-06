@@ -41,7 +41,9 @@ export default function TabLayout() {
             shadowRadius: 3.84,
             elevation: 5,
           },
+          lazy: false,
         }}
+        backBehavior="history"
       >
         <Tabs.Screen
           name="index"

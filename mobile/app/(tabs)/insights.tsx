@@ -3,14 +3,17 @@ import {
   RDA_VALUES,
 } from "@/src/constants";
 import { useAuth } from "@/src/contexts/auth.context";
-import { mealsService } from "@/src/services/meals.service";
+import { useMeals } from "@/src/contexts/meals.context";
 import { Ionicons } from "@expo/vector-icons";
+import { useFocusEffect } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Dimensions,
+  Image,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -23,15 +26,6 @@ import Svg, { Circle, Defs, Path, Stop, LinearGradient as SvgGradient } from "re
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
 const TIME_RANGES = ["Week", "Month", "3 Months"];
-
-interface InsightMeal {
-  id: string;
-  name: string;
-  items: any[];
-  calories: number;
-  date: string;
-  micronutrients?: Record<string, number>;
-}
 
 // Error boundary component
 class ErrorBoundary extends React.Component<
@@ -58,13 +52,11 @@ class ErrorBoundary extends React.Component<
 
 // Helper function to format numbers in human-readable format
 const formatNumber = (num: number): string => {
-  // Ensure num is a valid number
   const validNum = Number(num);
   if (isNaN(validNum)) {
     return '0';
   }
   
-  // Round to nearest integer for display
   const roundedNum = Math.round(validNum);
   
   if (roundedNum >= 1000000) {
@@ -87,7 +79,6 @@ const ErrorFallback = () => (
     <TouchableOpacity
       style={{ marginTop: 16, paddingHorizontal: 20, paddingVertical: 10, backgroundColor: '#4CAF50', borderRadius: 8 }}
       onPress={() => {
-        // Force reload the app
         if (typeof window !== 'undefined') {
           window.location.reload();
         }
@@ -101,78 +92,107 @@ const ErrorFallback = () => (
 export default function InsightsScreen() {
   const router = useRouter();
   const [selectedRange, setSelectedRange] = useState("Week");
-  const [meals, setMeals] = useState<InsightMeal[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
   const { user } = useAuth();
+  const { 
+    dailyStats, 
+    weeklyStats, 
+    monthlyStats, 
+    statsLoading, 
+    statsError, 
+    refreshStats,
+    clearErrors 
+  } = useMeals();
 
-  const fetchMealsForRange = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError(null);
+  // Refresh stats when screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      refreshStats();
+    }, [])
+  );
 
-      const endDate = new Date();
-      const startDate = new Date();
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    clearErrors();
+    await refreshStats();
+    setRefreshing(false);
+  }, [refreshStats, clearErrors]);
 
-      switch (selectedRange) {
-        case "Week":
-          startDate.setDate(endDate.getDate() - 7);
-          break;
-        case "Month":
-          startDate.setMonth(endDate.getMonth() - 1);
-          break;
-        case "3 Months":
-          startDate.setMonth(endDate.getMonth() - 3);
-          break;
-        default:
-          startDate.setDate(endDate.getDate() - 7);
-      }
-
-      const startDateStr = startDate.toISOString();
-      const endDateStr = endDate.toISOString();
-
-      // Check if user is authenticated before making API call
-      if (!user) {
-        setMeals([]);
-        setLoading(false);
-        return;
-      }
-
-      const response = await mealsService.getMealsByDateRange(startDateStr, endDateStr);
-      setMeals(response || []);
-    } catch (err: any) {
-      // Don't set error for network errors, just show empty state
-      if (err.message && !err.message.includes('network') && !err.message.includes('fetch')) {
-        setError(err.message || 'Failed to fetch meals');
-      }
-      setMeals([]);
-    } finally {
-      setLoading(false);
+  // Get stats based on selected range
+  const getStatsForRange = () => {
+    switch (selectedRange) {
+      case "Week":
+        return {
+          daily: dailyStats,
+          weekly: weeklyStats,
+          monthly: monthlyStats,
+        };
+      case "Month":
+        return {
+          daily: dailyStats,
+          weekly: weeklyStats,
+          monthly: monthlyStats,
+        };
+      case "3 Months":
+        return {
+          daily: dailyStats,
+          weekly: weeklyStats,
+          monthly: monthlyStats,
+        };
+      default:
+        return {
+          daily: dailyStats,
+          weekly: weeklyStats,
+          monthly: monthlyStats,
+        };
     }
-  }, [selectedRange, user]);
+  };
 
-  useEffect(() => {
-    fetchMealsForRange();
-  }, [fetchMealsForRange]);
+  const { daily, weekly, monthly } = getStatsForRange();
 
-  // Calculate total calories from fetched meals
-  // First try meal.calories, if that's 0, calculate from items
-  const totalCalories = meals.reduce((sum, meal) => {
-    let mealCalories = meal.calories || 0;
+  // Calculate total calories from stats
+  const totalCalories = useMemo(() => {
+    let total = 0;
     
-    // If meal calories is 0, try calculating from items
-    if (mealCalories === 0 && meal.items && meal.items.length > 0) {
-      mealCalories = meal.items.reduce((itemSum: number, item: any) => {
-        const itemCalories = typeof item.calories === 'number' ? item.calories : 
-                            typeof item.calories === 'string' ? parseFloat(item.calories) : 0;
-        return itemSum + (itemCalories || 0);
-      }, 0);
+    if (selectedRange === "Week" || selectedRange === "Month") {
+      daily.forEach(day => {
+        total += day.calories || 0;
+      });
+    } else {
+      // For 3 months, use weekly stats
+      weekly.forEach(week => {
+        total += week.totalCalories || 0;
+      });
     }
     
-    return sum + mealCalories;
-  }, 0);
-  
-  const totalItems = meals.reduce((sum, meal) => sum + (meal.items?.length || 0), 0);
+    return total;
+  }, [daily, weekly, selectedRange]);
+
+  // Calculate total protein from stats
+  const totalProtein = useMemo(() => {
+    let total = 0;
+    
+    if (selectedRange === "Week" || selectedRange === "Month") {
+      daily.forEach(day => {
+        total += day.protein || 0;
+      });
+    } else {
+      // For 3 months, use weekly stats
+      weekly.forEach(week => {
+        total += week.totalProtein || 0;
+      });
+    }
+    
+    return total;
+  }, [daily, weekly, selectedRange]);
+
+  const totalItems = useMemo(() => {
+    let total = 0;
+    daily.forEach(day => {
+      total += day.totalMeals || 0;
+    });
+    return total;
+  }, [daily]);
 
   // Calculate user's daily calorie target based on profile
   const calculateDailyCalorieTarget = () => {
@@ -218,36 +238,59 @@ export default function InsightsScreen() {
   
   const dailyCalorieTarget = calculateDailyCalorieTarget();
 
-  // Calculate aggregated micronutrients from all meals
-  const aggregatedMicronutrients = meals.reduce((acc, meal) => {
-    if (meal.items && meal.items.length > 0) {
-      meal.items.forEach((item: any) => {
-        if (item.micronutrients) {
-          Object.entries(item.micronutrients).forEach(([key, value]) => {
-            const numValue = typeof value === 'number' ? value : parseFloat(value as string) || 0;
-            acc[key] = (acc[key] || 0) + numValue;
-          });
-        }
-      });
-    }
-    // Also check meal-level micronutrients
-    if (meal.micronutrients) {
-      Object.entries(meal.micronutrients).forEach(([key, value]) => {
-        const numValue = typeof value === 'number' ? value : parseFloat(value as string) || 0;
-        acc[key] = (acc[key] || 0) + numValue;
-      });
-    }
-    return acc;
-  }, {} as Record<string, number>);
-
-
   // Calculate days in selected range
   const daysInRange = selectedRange === "Week" ? 7 : selectedRange === "Month" ? 30 : 90;
   const totalCalorieTarget = dailyCalorieTarget * daysInRange;
 
-  // Get unit for nutrient - uses the constants from nutrition.ts
+  // Calculate daily protein target based on user profile
+  const calculateDailyProteinTarget = () => {
+    if (!user) return 50; // Default fallback in grams
+    
+    const weight = user.weight || 70; // kg
+    const activityLevel = user.activityLevel || 'moderate';
+    const primaryGoal = user.primaryGoal || 'maintain';
+    
+    // Protein recommendation: 0.8-1g per kg body weight for sedentary
+    // Increase based on activity level and goals
+    let proteinPerKg = 0.8; // Base recommendation
+    
+    if (activityLevel === 'active' || activityLevel === 'very_active') {
+      proteinPerKg = 1.2;
+    } else if (activityLevel === 'moderate') {
+      proteinPerKg = 1.0;
+    }
+    
+    // Adjust based on goal
+    if (primaryGoal.toLowerCase().includes('gain')) {
+      proteinPerKg = Math.max(proteinPerKg, 1.4); // Higher for muscle gain
+    } else if (primaryGoal.toLowerCase().includes('loss')) {
+      proteinPerKg = Math.max(proteinPerKg, 1.0); // Higher protein for fat loss to preserve muscle
+    }
+    
+    return Math.round(weight * proteinPerKg);
+  };
+  
+  const dailyProteinTarget = calculateDailyProteinTarget();
+  const totalProteinTarget = dailyProteinTarget * daysInRange;
+
+  // Calculate aggregated micronutrients from all stats
+  const aggregatedMicronutrients = useMemo(() => {
+    const acc: Record<string, number> = {};
+    
+    daily.forEach(day => {
+      if (day.micronutrients) {
+        Object.entries(day.micronutrients).forEach(([key, value]) => {
+          const numValue = typeof value === 'number' ? value : parseFloat(value as string) || 0;
+          acc[key] = (acc[key] || 0) + numValue;
+        });
+      }
+    });
+    
+    return acc;
+  }, [daily]);
+
+  // Get unit for nutrient
   const getUnitForNutrient = (nutrientName: string): string => {
-    // Map from camelCase keys to underscore keys used in constants
     const keyMapping: Record<string, string> = {
       'vitaminC': 'vitamin_c',
       'vitaminD': 'vitamin_d',
@@ -287,15 +330,13 @@ export default function InsightsScreen() {
     return units[mappedKey] || 'mg';
   };
 
-  // Calculate RDA achievement for a specific nutrient
+  // Calculate RDA achievement
   const calculateRDAAchievement = (nutrientName: string, consumedAmount: number) => {
     const normalizedName = normalizeNutrientName(nutrientName);
-    // Map camelCase to underscore notation used in constants
     const underscoreName = normalizedName.replace(/([A-Z])/g, '_$1').toLowerCase();
     const rdaValue = RDA_VALUES[underscoreName] || RDA_VALUES[normalizedName.toLowerCase()];
     if (!rdaValue) return null;
     
-    // Calculate total RDA needed for the period
     const totalRDA = rdaValue * daysInRange;
     const achieved = Math.min(consumedAmount, totalRDA);
     
@@ -307,33 +348,18 @@ export default function InsightsScreen() {
     };
   };
 
-  // Generate chart data based on fetched meals
+  // Generate chart data
   const generateChartData = () => {
     const data: number[] = [];
     const daysToShow = selectedRange === "Week" ? 7 : selectedRange === "Month" ? 30 : 90;
     
-    // Group meals by day
     const mealsByDay: { [key: string]: number } = {};
     
-    meals.forEach(meal => {
-      const dateKey = new Date(meal.date).toISOString().split('T')[0];
-      
-      // Calculate calories for this meal
-      let mealCalories = meal.calories || 0;
-      
-      // If meal calories is 0 or not set, calculate from items
-      if (mealCalories === 0 && meal.items && meal.items.length > 0) {
-        mealCalories = meal.items.reduce((itemSum: number, item: any) => {
-          const itemCalories = typeof item.calories === 'number' ? item.calories : 
-                              typeof item.calories === 'string' ? parseFloat(item.calories) : 0;
-          return itemSum + (itemCalories || 0);
-        }, 0);
-      }
-      
-      mealsByDay[dateKey] = (mealsByDay[dateKey] || 0) + mealCalories;
+    daily.forEach(day => {
+      const dateKey = new Date(day.date).toISOString().split('T')[0];
+      mealsByDay[dateKey] = (mealsByDay[dateKey] || 0) + (day.calories || 0);
     });
 
-    // Generate data points for the chart
     const endDate = new Date();
     for (let i = daysToShow - 1; i >= 0; i--) {
       const date = new Date(endDate);
@@ -345,7 +371,7 @@ export default function InsightsScreen() {
     return data;
   };
 
-  const chartData = useMemo(() => generateChartData(), [meals, selectedRange]);
+  const chartData = useMemo(() => generateChartData(), [daily, selectedRange]);
   
   // Generate labels for the chart
   const generateLabels = () => {
@@ -353,7 +379,7 @@ export default function InsightsScreen() {
     const daysToShow = selectedRange === "Week" ? 7 : selectedRange === "Month" ? 7 : 6;
     
     const endDate = new Date();
-    const step = Math.floor(90 / 6); // For 3 months
+    const step = Math.floor(90 / 6);
     
     for (let i = 0; i < daysToShow; i++) {
       const date = new Date(endDate);
@@ -388,19 +414,20 @@ export default function InsightsScreen() {
       return "";
     }
     
-    const maxVal = Math.max(...validData, 1); // Avoid division by zero
+    const maxVal = Math.max(...validData, 1);
     const stepX = validData.length > 1 ? width / (validData.length - 1) : width / 2;
     
     return validData.reduce((acc, val, i) => {
       const x = validData.length > 1 ? i * stepX : width / 2;
-      const y = height - ((val / maxVal) * height * 0.8) - 10; // Add some padding
+      const y = height - ((val / maxVal) * height * 0.8) - 10;
       return acc + (i === 0 ? `M ${x} ${y}` : ` L ${x} ${y}`);
     }, "");
   };
 
   const maxCalories = chartData.length > 0 ? Math.max(...chartData.filter(v => typeof v === 'number' && !isNaN(v)), 1) : 1;
 
-  if (loading && meals.length === 0) {
+  // Loading State
+  if (statsLoading && dailyStats.length === 0) {
     return (
       <View style={styles.container}>
         <LinearGradient
@@ -429,14 +456,47 @@ export default function InsightsScreen() {
           end={{ x: 1, y: 1 }}
           style={styles.header}
         >
-          <Text style={styles.headerTitle}>Insights</Text>
+          <View style={styles.headerLeft}>
+            <Ionicons name="bulb-outline" size={24} color="#FFF" style={styles.headerIcon} />
+            <Text style={styles.headerTitle}>Insights</Text>
+          </View>
+          <View style={styles.logoContainer}>
+            <View style={styles.logoCircle}>
+              <View style={styles.logoInner}>
+                <Image
+                  source={require("@/assets/images/logo.png")}
+                  style={styles.logoImage}
+                  resizeMode="contain"
+                />
+              </View>
+            </View>
+          </View>
         </LinearGradient>
 
         <ScrollView 
           style={styles.scrollView}
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              colors={["#4CAF50"]}
+              tintColor="#4CAF50"
+            />
+          }
         >
+          {/* Error Banner */}
+          {statsError && (
+            <View style={styles.errorBanner}>
+              <Ionicons name="warning-outline" size={20} color="#C62828" />
+              <Text style={styles.errorText} numberOfLines={2}>{statsError}</Text>
+              <TouchableOpacity onPress={onRefresh} style={styles.retryButton}>
+                <Text style={styles.retryText}>Retry</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
           {/* Time Range Selector */}
           <View style={styles.rangeSelector}>
             {TIME_RANGES.map((range) => (
@@ -460,15 +520,6 @@ export default function InsightsScreen() {
             ))}
           </View>
 
-          {error && (
-            <View style={styles.errorContainer}>
-              <Text style={styles.errorText}>{error}</Text>
-              <TouchableOpacity onPress={fetchMealsForRange} style={styles.retryButton}>
-                <Text style={styles.retryText}>Retry</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-
           {/* Weekly Overview Card */}
           <View style={styles.overviewCard}>
             <View style={styles.cardHeader}>
@@ -483,7 +534,7 @@ export default function InsightsScreen() {
 
             {/* Chart Area */}
             <View style={styles.chartContainer}>
-              {chartData && chartData.length > 0 ? (
+              {chartData && chartData.length > 0 && chartData.some(v => v > 0) ? (
                 <Svg height="140" width={SCREEN_WIDTH - 80}>
                   <Defs>
                     <SvgGradient id="grad" x1="0" y1="0" x2="0" y2="1">
@@ -492,13 +543,11 @@ export default function InsightsScreen() {
                     </SvgGradient>
                   </Defs>
                   
-                  {/* Area under the line */}
                   <Path
                     d={`${generatePath()} L ${SCREEN_WIDTH - 80} 120 L 0 120 Z`}
                     fill="url(#grad)"
                   />
                   
-                  {/* The Line */}
                   <Path
                     d={generatePath()}
                     fill="none"
@@ -508,7 +557,6 @@ export default function InsightsScreen() {
                     strokeLinejoin="round"
                   />
                   
-                  {/* Data Points */}
                   {chartData && chartData.length > 0 && chartData.map((val, i) => {
                     const stepX = chartData.length > 1 ? (SCREEN_WIDTH - 80) / (chartData.length - 1) : (SCREEN_WIDTH - 80) / 2;
                     const x = chartData.length > 1 ? i * stepX : (SCREEN_WIDTH - 80) / 2;
@@ -530,6 +578,9 @@ export default function InsightsScreen() {
               ) : (
                 <View style={styles.noDataContainer}>
                   <Text style={styles.noDataText}>No data available for this period</Text>
+                  <Text style={[styles.noDataText, { fontSize: 12, marginTop: 4 }]}>
+                    Start logging meals to see your insights
+                  </Text>
                 </View>
               )}
               
@@ -548,26 +599,42 @@ export default function InsightsScreen() {
                 <Text style={styles.statLabel}>Total Calories</Text>
               </View>
               <View style={styles.statItem}>
-                <Text style={styles.statValue}>{formatNumber(meals.length)}</Text>
-                <Text style={styles.statLabel}>Meals Logged</Text>
+                <Text style={[styles.statValue, { color: '#4CAF50' }]}>{formatNumber(totalProtein)}g</Text>
+                <Text style={styles.statLabel}>Total Protein</Text>
               </View>
               <View style={styles.statItem}>
                 <Text style={styles.statValue}>{formatNumber(totalItems)}</Text>
-                <Text style={styles.statLabel}>Food Items</Text>
+                <Text style={styles.statLabel}>Meals Logged</Text>
               </View>
             </View>
 
             {/* Score Section */}
             <View style={styles.scoreSection}>
-              <Text style={styles.scoreValue}>
-                {totalCalories > 0 && totalCalorieTarget > 0 
-                  ? Math.min(Math.round((totalCalories / totalCalorieTarget) * 100), 100) 
-                  : 0}%
-              </Text>
-              <Text style={styles.scoreLabel}>Average goal adherence</Text>
-              <Text style={[styles.statLabel, { marginTop: 4 }]}>
-                {dailyCalorieTarget.toLocaleString()} cal/day target
-              </Text>
+              <View style={styles.scoreRow}>
+                <View style={styles.scoreItem}>
+                  <Text style={styles.scoreValue}>
+                    {totalCalories > 0 && totalCalorieTarget > 0 
+                      ? Math.min(Math.round((totalCalories / totalCalorieTarget) * 100), 100) 
+                      : 0}%
+                  </Text>
+                  <Text style={styles.scoreLabel}>Calories Adherence</Text>
+                  <Text style={[styles.statLabel, { marginTop: 4 }]}>
+                    {dailyCalorieTarget.toLocaleString()} cal/day
+                  </Text>
+                </View>
+                <View style={styles.scoreDivider} />
+                <View style={styles.scoreItem}>
+                  <Text style={[styles.scoreValue, { color: '#4CAF50' }]}>
+                    {totalProtein > 0 && totalProteinTarget > 0 
+                      ? Math.min(Math.round((totalProtein / totalProteinTarget) * 100), 100) 
+                      : 0}%
+                  </Text>
+                  <Text style={styles.scoreLabel}>Protein Adherence</Text>
+                  <Text style={[styles.statLabel, { marginTop: 4 }]}>
+                    {dailyProteinTarget}g/day
+                  </Text>
+                </View>
+              </View>
             </View>
           </View>
 
@@ -576,7 +643,6 @@ export default function InsightsScreen() {
             <Text style={styles.cardTitle}>RDA Achievement Rate</Text>
             <View style={styles.achievementList}>
               {(() => {
-                // Priority nutrients to display
                 const priorityNutrients = ['vitaminC', 'iron', 'calcium', 'vitaminD'];
                 const nutrientColors: Record<string, string> = {
                   'vitaminC': '#FF9800',
@@ -591,10 +657,8 @@ export default function InsightsScreen() {
                   'vitaminD': 'Vitamin D',
                 };
 
-                // Calculate RDA achievements for available nutrients
                 const achievements = priorityNutrients
                   .map(nutrientKey => {
-                    // Find the nutrient in aggregated data (case-insensitive)
                     const matchingKey = Object.keys(aggregatedMicronutrients).find(
                       key => normalizeNutrientName(key) === nutrientKey
                     );
@@ -604,8 +668,7 @@ export default function InsightsScreen() {
                   })
                   .filter((item): item is NonNullable<typeof item> => item !== null);
 
-                // If no data available, show placeholder message
-                if (achievements.length === 0) {
+                if (achievements.length === 0 || achievements.every(a => a.achieved === 0)) {
                   return (
                     <View style={styles.noDataContainer}>
                       <Text style={styles.noDataText}>No micronutrient data available</Text>
@@ -666,151 +729,21 @@ export default function InsightsScreen() {
                 <View style={styles.confidenceBadge}>
                   <Text style={styles.confidenceText}>Medium confidence</Text>
                 </View>
-                <TouchableOpacity style={styles.researchLink}>
+                <TouchableOpacity 
+                  style={styles.researchLink}
+                  onPress={() => {
+                    const researchQuery = `Tell me about the latest peer-reviewed research on Vitamin D and Iron nutrition. Include relevant research papers, studies, and links to scientific publications. Also analyze my current intake data: Based on my nutrient intake patterns, I'm showing possible contributors to low energy levels including low Vitamin D and inconsistent Iron intake. What does the evidence suggest about how these deficiencies may impact energy levels and what recommendations would you make?`;
+                    router.push({
+                      pathname: "/(tabs)/chat",
+                      params: { prefill: researchQuery }
+                    });
+                  }}
+                >
                   <Ionicons name="book-outline" size={16} color="#666" />
                   <Text style={styles.researchText}>View research</Text>
                 </TouchableOpacity>
               </View>
 
-              {/* Get Recommendations button - Hide for admin and pro users */}
-              {user?.role !== "admin" && user?.role !== "prouser" && (
-                <TouchableOpacity 
-                  style={styles.premiumButton} 
-                  activeOpacity={0.8}
-                  onPress={() => router.push("/pricing")}
-                >
-                  <LinearGradient
-                    colors={["#4CAF50", "#1A1A1A"]}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                    style={styles.premiumButtonGradient}
-                  >
-                    {/* Background Pattern */}
-                    <View style={styles.buttonPattern}>
-                      <View style={styles.patternCircle1} />
-                      <View style={styles.patternCircle2} />
-                    </View>
-
-                    {/* Decorative Stars */}
-                    <View style={styles.starContainer}>
-                      <Ionicons
-                        name="sparkles"
-                        size={14}
-                        color="rgba(255,255,255,0.4)"
-                        style={styles.star1}
-                      />
-                      <Ionicons
-                        name="sparkles"
-                        size={10}
-                        color="rgba(255,255,255,0.3)"
-                        style={styles.star2}
-                      />
-                    </View>
-
-                    <Text style={styles.premiumButtonText}>Get Recommendations</Text>
-                    <Ionicons name="lock-closed" size={16} color="#FFF" />
-                  </LinearGradient>
-                </TouchableOpacity>
-              )}
-            </View>
-
-            {/* Insight Card 2 */}
-            <View style={styles.insightCard}>
-              <View style={styles.insightHeader}>
-                <View style={[styles.insightIconContainer, { backgroundColor: '#E8F5E9' }]}>
-                  <Ionicons name="warning-outline" size={24} color="#4CAF50" />
-                </View>
-                <View style={styles.insightHeaderText}>
-                  <Text style={styles.insightQuestion}>Am I exceeding safe limits?</Text>
-                  <Text style={styles.insightDescription}>
-                    Your Vitamin A intake has been near the upper limit (UL) on 3 out of 7 days this week. Consistently exceeding the UL may increase risk of adverse effects.
-                  </Text>
-                </View>
-              </View>
-              
-              <View style={styles.insightFooter}>
-                <View style={styles.confidenceBadge}>
-                  <Text style={styles.confidenceText}>High confidence</Text>
-                </View>
-                <TouchableOpacity style={styles.researchLink}>
-                  <Ionicons name="book-outline" size={16} color="#666" />
-                  <Text style={styles.researchText}>View research</Text>
-                </TouchableOpacity>
-              </View>
-
-              {/* Review Foods button - Hide for admin and pro users */}
-              {user?.role !== "admin" && user?.role !== "prouser" && (
-                <TouchableOpacity 
-                  style={styles.premiumButton} 
-                  activeOpacity={0.8}
-                  onPress={() => router.push("/pricing")}
-                >
-                  <LinearGradient
-                    colors={["#4CAF50", "#1A1A1A"]}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                    style={styles.premiumButtonGradient}
-                  >
-                    {/* Background Pattern */}
-                    <View style={styles.buttonPattern}>
-                      <View style={styles.patternCircle1} />
-                      <View style={styles.patternCircle2} />
-                    </View>
-
-                    {/* Decorative Stars */}
-                    <View style={styles.starContainer}>
-                      <Ionicons
-                        name="sparkles"
-                        size={14}
-                        color="rgba(255,255,255,0.4)"
-                        style={styles.star1}
-                      />
-                      <Ionicons
-                        name="sparkles"
-                        size={10}
-                        color="rgba(255,255,255,0.3)"
-                        style={styles.star2}
-                      />
-                    </View>
-
-                    <Text style={styles.premiumButtonText}>Review Foods</Text>
-                    <Ionicons name="lock-closed" size={16} color="#FFF" />
-                  </LinearGradient>
-                </TouchableOpacity>
-              )}
-            </View>
-
-            {/* Insight Card 3: Deficiency Risk Pattern */}
-            <View style={styles.insightCard}>
-              <View style={styles.insightHeader}>
-                <View style={[styles.insightIconContainer, { backgroundColor: '#E8F5E9' }]}>
-                  <Ionicons name="bulb-outline" size={24} color="#4CAF50" />
-                </View>
-                <View style={styles.insightHeaderText}>
-                  <Text style={styles.insightQuestion}>Deficiency Risk Pattern</Text>
-                  <Text style={styles.insightDescription}>
-                    You've had low Vitamin D intake on 5 out of 7 days this week. Consistent deficiency over time may impact bone health and immune function.
-                  </Text>
-                </View>
-              </View>
-
-              <View style={styles.evidenceBox}>
-                <Text style={styles.evidenceTitle}>Evidence-backed risks:</Text>
-                <View style={styles.bulletPoint}>
-                  <View style={styles.bullet} />
-                  <Text style={styles.bulletText}>Weakened bone density over time</Text>
-                </View>
-                <View style={styles.bulletPoint}>
-                  <View style={styles.bullet} />
-                  <Text style={styles.bulletText}>Reduced immune system function</Text>
-                </View>
-                <View style={styles.bulletPoint}>
-                  <View style={styles.bullet} />
-                  <Text style={styles.bulletText}>Potential mood regulation issues</Text>
-                </View>
-              </View>
-
-              {/* Add Vitamin D Sources button - Hide for admin and pro users */}
               {user?.role !== "admin" && user?.role !== "prouser" && (
                 <TouchableOpacity 
                   style={styles.premiumButton} 
@@ -831,7 +764,7 @@ export default function InsightsScreen() {
                       <Ionicons name="sparkles" size={14} color="rgba(255,255,255,0.4)" style={styles.star1} />
                       <Ionicons name="sparkles" size={10} color="rgba(255,255,255,0.3)" style={styles.star2} />
                     </View>
-                    <Text style={styles.premiumButtonText}>Add Vitamin D Sources</Text>
+                    <Text style={styles.premiumButtonText}>Get Recommendations</Text>
                     <Ionicons name="lock-closed" size={16} color="#FFF" />
                   </LinearGradient>
                 </TouchableOpacity>
@@ -858,17 +791,59 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFFFFF",
   },
   header: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     paddingTop: 15,
     paddingBottom: 20,
     paddingHorizontal: 20,
     borderBottomLeftRadius: 24,
     borderBottomRightRadius: 24,
   },
+  headerLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  headerIcon: {
+    marginTop: 2,
+  },
   headerTitle: {
     fontSize: 22,
     fontWeight: "800",
     color: "#FFF",
     letterSpacing: -0.5,
+  },
+  logoContainer: {
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  logoCircle: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: "rgba(255, 255, 255, 0.15)",
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.2)",
+  },
+  logoInner: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: "#fff",
+    justifyContent: "center",
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  logoImage: {
+    width: 32,
+    height: 32,
   },
   scrollView: {
     flex: 1,
@@ -888,25 +863,29 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#666",
   },
-  errorContainer: {
-    backgroundColor: "#FFEBEE",
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
+  errorBanner: {
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
+    backgroundColor: "#FFEBEE",
+    padding: 16,
+    borderRadius: 12,
+    borderLeftWidth: 4,
+    borderLeftColor: "#C62828",
+    marginBottom: 20,
   },
   errorText: {
-    color: "#C62828",
-    fontSize: 14,
     flex: 1,
+    marginLeft: 12,
+    fontSize: 14,
+    color: "#C62828",
+    fontWeight: "500",
   },
   retryButton: {
     backgroundColor: "#C62828",
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 8,
+    marginLeft: 12,
   },
   retryText: {
     color: "#FFF",
@@ -1026,20 +1005,36 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   scoreSection: {
-    alignItems: "center",
     paddingVertical: 16,
     borderTopWidth: 1,
     borderTopColor: "#E9ECEF",
   },
+  scoreRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-around",
+    width: "100%",
+  },
+  scoreItem: {
+    alignItems: "center",
+    flex: 1,
+  },
+  scoreDivider: {
+    width: 1,
+    height: 60,
+    backgroundColor: "#E9ECEF",
+    marginHorizontal: 16,
+  },
   scoreValue: {
-    fontSize: 36,
+    fontSize: 32,
     fontWeight: "800",
     color: "#4CAF50",
   },
   scoreLabel: {
-    fontSize: 14,
+    fontSize: 13,
     color: "#666",
     marginTop: 4,
+    textAlign: "center",
   },
   achievementList: {
     gap: 16,
@@ -1197,34 +1192,6 @@ const styles = StyleSheet.create({
     color: "#FFF",
     fontSize: 15,
     fontWeight: "700",
-  },
-  evidenceBox: {
-    backgroundColor: "#FFF",
-    borderRadius: 12,
-    padding: 12,
-    gap: 8,
-    marginTop: 4,
-  },
-  evidenceTitle: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: "#1A1A1A",
-  },
-  bulletPoint: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  bullet: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: "#4CAF50",
-  },
-  bulletText: {
-    fontSize: 12,
-    color: "#666",
-    flex: 1,
   },
   disclaimerCard: {
     backgroundColor: "#F8F9FA",
