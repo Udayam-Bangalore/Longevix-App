@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   Injectable,
+  Logger,
   UnauthorizedException,
 } from '@nestjs/common';
 import { AuthResponse, User } from '@supabase/supabase-js';
@@ -12,12 +13,16 @@ import { RegisterDto } from './dto/registerUser.dto';
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private readonly supabaseService: SupabaseService,
     private readonly userService: UserService,
   ) {}
 
   async registerUser(registerUserDto: RegisterDto): Promise<AuthResponse> {
+    this.logger.log(`Registration attempt for email: ${registerUserDto.email}`);
+    
     const { data, error } = await this.supabaseService.supabase.auth.signUp({
       email: registerUserDto.email,
       password: registerUserDto.password,
@@ -29,36 +34,66 @@ export class AuthService {
     });
 
     if (error) {
+      this.logger.error(`Registration error: ${error.message}`);
       throw new UnauthorizedException(error.message);
     }
 
+    this.logger.log(`Registration successful for user ID: ${data.user?.id}`);
+    this.logger.log(`Email confirmed at: ${data.user?.email_confirmed_at || 'not confirmed'}`);
+    
     return { data, error };
   }
 
   async loginUser(loginDto: LoginDto): Promise<AuthResponse> {
     // Email-based login
     if (loginDto.email) {
+      this.logger.log(`Login attempt for email: ${loginDto.email}`);
+      this.logger.log(`Environment: ${process.env.NODE_ENV || 'not set'}`);
+      
       const { data, error } =
         await this.supabaseService.supabase.auth.signInWithPassword({
           email: loginDto.email,
           password: loginDto.password,
         });
 
+      // Log detailed error info for debugging
       if (error) {
+        this.logger.error(`Supabase auth error: ${error.message}`);
+        this.logger.error(`Error code: ${error.status || 'not set'}`);
+        this.logger.error(`Error name: ${error.name}`);
+        
         // Map Supabase error codes to user-friendly messages
+        // Check for specific errors FIRST before generic ones
         const errorMessage = error.message.toLowerCase();
-        if (errorMessage.includes('invalid') || errorMessage.includes('credentials')) {
+        
+        // Check for email confirmation issues first
+        if (errorMessage.includes('email not confirmed') || 
+            errorMessage.includes('email_address.is_not_verified') ||
+            error.status === 400 && error.message.includes('not verified')) {
+          this.logger.warn('Email confirmation required - user needs to verify email');
+          throw new UnauthorizedException('Please verify your email address before logging in. Check your inbox for the verification link.');
+        }
+        
+        // Check for invalid credentials
+        if (errorMessage.includes('invalid') || 
+            errorMessage.includes('credentials') || 
+            errorMessage.includes('password does not match')) {
           throw new UnauthorizedException('Invalid email or password');
         }
-        if (errorMessage.includes('email not confirmed')) {
-          throw new UnauthorizedException('Please verify your email address');
-        }
+        
         if (errorMessage.includes('rate limit')) {
           throw new UnauthorizedException('Too many attempts. Please try again later');
         }
+        
+        // Log the raw error for debugging if it's not a known error
+        this.logger.error(`Unhandled auth error: ${error.message} (status: ${error.status})`);
         throw new UnauthorizedException('Login failed. Please check your credentials');
       }
 
+      // Log successful login details (without sensitive data)
+      this.logger.log(`Login successful for user ID: ${data.user?.id}`);
+      this.logger.log(`Email confirmed: ${data.user?.email_confirmed_at || 'not confirmed'}`);
+      
       return { data, error };
     }
     // Phone-based login (must use OTP)

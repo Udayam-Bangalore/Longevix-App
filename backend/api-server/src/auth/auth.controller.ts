@@ -29,42 +29,74 @@ export class AuthController {
   @Post('register')
   async register(@Body() registerUserDto: RegisterDto) {
     const result = await this.authService.registerUser(registerUserDto);
+    
+    // Check if email confirmation is required
+    const emailConfirmed = !!result.data.user?.email_confirmed_at;
+    
+    if (!emailConfirmed) {
+      return {
+        message: 'Registration successful! Please check your email to verify your account before logging in.',
+        user: result.data.user,
+        requiresEmailVerification: true,
+        // Don't return access token - user must verify email first
+      };
+    }
+    
     return {
-      message:
-        'User registered successfully. Please check your email to verify your account.',
+      message: 'User registered successfully and email verified!',
       user: result.data.user,
-      // Do not return access token - user must verify email first
+      requiresEmailVerification: false,
     };
   }
 
   @Post('login')
   async login(@Body() loginDto: LoginDto) {
-    const result = await this.authService.loginUser(loginDto);
+    try {
+      const result = await this.authService.loginUser(loginDto);
 
-    // Override Supabase's default "authenticated" role with "user" for non-admin/non-pro-user accounts
-    const user = result.data.user;
-    if (user && user.role === 'authenticated') {
-      user.role = 'user';
+      // Override Supabase's default "authenticated" role with "user" for non-admin/non-pro-user accounts
+      const user = result.data.user;
+      if (user && user.role === 'authenticated') {
+        user.role = 'user';
+      }
+
+      // Check if user is a reviewer (for Google Play Store access)
+      const isReviewer = user?.email === 'reviewer@longevix.com';
+
+      // Check email verification status (bypass for reviewer)
+      const emailVerified = user?.email_confirmed_at || isReviewer;
+      if (!emailVerified) {
+        throw new UnauthorizedException({
+          message: 'Please verify your email address to log in',
+          error: 'EMAIL_NOT_VERIFIED',
+          resolution: 'RESEND_VERIFICATION',
+        });
+      }
+
+      // Note: Phone verification is optional - users can login with email only
+      // Phone verification is only required for phone-based authentication
+
+      return {
+        message: 'User logged in successfully',
+        user,
+        accessToken: result.data.session?.access_token,
+        refreshToken: result.data.session?.refresh_token,
+      };
+    } catch (error) {
+      // Check if it's an email verification error and add helpful info
+      if (error instanceof UnauthorizedException) {
+        const errorMessage = error.message?.toLowerCase() || '';
+        if (errorMessage.includes('verify your email') || errorMessage.includes('email not confirmed')) {
+          throw new UnauthorizedException({
+            message: errorMessage,
+            error: 'EMAIL_NOT_VERIFIED',
+            resolution: 'RESEND_VERIFICATION',
+            hint: 'Use POST /auth/resend-verification-email to resend the verification link',
+          });
+        }
+      }
+      throw error;
     }
-
-    // Check if user is a reviewer (for Google Play Store access)
-    const isReviewer = user?.email === 'reviewer@longevix.com';
-
-    // Check email verification status (bypass for reviewer)
-    const emailVerified = user?.email_confirmed_at || isReviewer;
-    if (!emailVerified) {
-      throw new UnauthorizedException('Verify email first');
-    }
-
-    // Note: Phone verification is optional - users can login with email only
-    // Phone verification is only required for phone-based authentication
-
-    return {
-      message: 'User logged in successfully',
-      user,
-      accessToken: result.data.session?.access_token,
-      refreshToken: result.data.session?.refresh_token,
-    };
   }
 
   @UseGuards(AuthGuard)
