@@ -10,22 +10,24 @@ import { NutritionAggregationService } from './nutrition-aggregation.service';
 import { NutritionSchedulerService } from './nutrition-scheduler.service';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([
-    Meal, 
-    NutritionDailyStats, 
-    NutritionWeeklyStats, 
-    NutritionMonthlyStats
-  ])],
+  imports: [
+    TypeOrmModule.forFeature([
+      Meal,
+      NutritionDailyStats,
+      NutritionWeeklyStats,
+      NutritionMonthlyStats,
+    ]),
+  ],
   controllers: [MealsController],
   providers: [
-    MealsService, 
+    MealsService,
     NutritionAggregationService,
-    NutritionSchedulerService
+    NutritionSchedulerService,
   ],
   exports: [
-    MealsService, 
+    MealsService,
     NutritionAggregationService,
-    NutritionSchedulerService
+    NutritionSchedulerService,
   ],
 })
 export class MealsModule {}

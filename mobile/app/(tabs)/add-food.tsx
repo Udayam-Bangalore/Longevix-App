@@ -71,6 +71,7 @@ export default function AddFoodScreen() {
       };
 
       const response = await aiService.generateNutrients(requestData);
+      
       setNutritionData(response);
     } catch (err: any) {
       setError('Failed to calculate nutrition. Please try again.');
@@ -389,32 +390,48 @@ export default function AddFoodScreen() {
         <TouchableOpacity 
           style={[styles.logButton, foods.length === 0 && styles.logButtonDisabled]} 
           activeOpacity={0.9}
-          disabled={foods.length === 0}
+          disabled={foods.length === 0 || loading}
           onPress={async () => {
+            if (loading || !nutritionData) {
+              setError('Please wait for nutrition data to load');
+              return;
+            }
             try {
               setLoading(true);
+              setError(null);
+              
               for (let i = 0; i < foods.length; i++) {
                 const food = foods[i];
+                
                 const foodWithNutrients = {
                   ...food,
+                  quantity: parseFloat(food.quantity) || 0,
                   calories: nutritionData?.items[i]?.calories || 0,
                   fat: nutritionData?.items[i]?.fat || 0,
                   protein: nutritionData?.items[i]?.protein || 0,
                   carbohydrates: nutritionData?.items[i]?.carbohydrates || 0,
                   micronutrients: nutritionData?.items[i]?.micronutrients,
                 };
-                await addFoodToMeal(meal, foodWithNutrients);
+                
+                try {
+                  await addFoodToMeal(meal, foodWithNutrients);
+                } catch (mealError: any) {
+                  throw mealError;
+                }
               }
+              
               clearForm();
-              // Navigate to home tab and force a refresh
-              router.replace("/(tabs)");
-            } catch (error) {
-              setError('Failed to add foods. Please try again.');
+              
+              // Navigate to home screen with refresh parameter
+              router.push({ pathname: "/(tabs)", params: { t: Date.now().toString() } });
+            } catch (error: any) {
+              setError(error.message || 'Failed to add foods. Please try again.');
             } finally {
               setLoading(false);
             }
           }}
         >
+        
           <LinearGradient
             colors={foods.length > 0 ? ["#4CAF50", "#2E7D32"] : ["#A5D6A7", "#A5D6A7"]}
             start={{ x: 0, y: 0 }}

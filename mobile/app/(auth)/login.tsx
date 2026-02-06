@@ -3,6 +3,7 @@ import { useAuth } from "@/src/contexts/auth.context";
 import { Ionicons } from "@expo/vector-icons";
 import FontAwesome6 from "@expo/vector-icons/FontAwesome6";
 import { LinearGradient } from "expo-linear-gradient";
+import * as Linking from "expo-linking";
 import { router } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
 import {
@@ -40,11 +41,12 @@ export default function LoginScreen() {
   const [otpSent, setOtpSent] = useState(false);
   const [resendTimer, setResendTimer] = useState(0);
 
-  const { login, sendPhoneOtp, verifyPhoneOtp } = useAuth();
+  const { login, sendPhoneOtp, verifyPhoneOtp, user, isAuthenticated } = useAuth();
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(30)).current;
   const scaleAnim = useRef(new Animated.Value(0.95)).current;
+  const prevAuthRef = useRef(isAuthenticated);
 
   useEffect(() => {
     Animated.parallel([
@@ -67,6 +69,18 @@ export default function LoginScreen() {
     ]).start();
   }, []);
 
+  // Redirect after successful login
+  useEffect(() => {
+    if (isAuthenticated && !prevAuthRef.current && user) {
+      prevAuthRef.current = true;
+      if (!user.profileCompleted) {
+        router.replace("/(auth)/profile-setup");
+      } else {
+        router.replace("/(tabs)");
+      }
+    }
+  }, [isAuthenticated, user]);
+
   const handleLogin = async () => {
     if (!email || !password) {
       Alert.alert(
@@ -80,7 +94,6 @@ export default function LoginScreen() {
 
     try {
       await login(email.trim(), password);
-      router.replace("/(tabs)");
     } catch (error) {
       Alert.alert(
         "Login Failed",
@@ -158,7 +171,6 @@ export default function LoginScreen() {
 
     try {
       await verifyPhoneOtp(phone, otp);
-      router.replace("/(tabs)");
     } catch (error) {
       Alert.alert(
         "Verification Failed",
@@ -480,6 +492,25 @@ export default function LoginScreen() {
                 </Text>
               </TouchableOpacity>
             </View>
+
+            <View style={styles.legalLinksContainer}>
+              <Text style={styles.legalText}>
+                By signing in, you agree to our{" "}
+                <Text 
+                  style={styles.legalLink} 
+                  onPress={() => Linking.openURL("https://udayam.co.in/terms-conditions")}
+                >
+                  Terms & Conditions
+                </Text>{" "}
+                and{" "}
+                <Text 
+                  style={styles.legalLink} 
+                  onPress={() => Linking.openURL("https://udayam.co.in/privacy-policy")}
+                >
+                  Privacy Policy
+                </Text>
+              </Text>
+            </View>
           </ScrollView>
         </KeyboardAvoidingView>
       </LinearGradient>
@@ -662,6 +693,23 @@ const styles = StyleSheet.create({
     color: "#2E7D32",
     fontWeight: "600",
     marginLeft: 8,
+  },
+  legalLinksContainer: {
+    alignSelf: "center",
+    marginTop: responsiveHeight(10, 0.015),
+    marginBottom: responsiveHeight(20, 0.025),
+  },
+  legalText: {
+    fontSize: responsiveSize(12, 0.03),
+    color: "#666",
+    textAlign: "center",
+    lineHeight: 18,
+  },
+  legalLink: {
+    fontSize: responsiveSize(12, 0.03),
+    color: "#2E7D32",
+    fontWeight: "600",
+    textDecorationLine: "underline",
   },
   otpSentInfo: {
     flexDirection: "row",

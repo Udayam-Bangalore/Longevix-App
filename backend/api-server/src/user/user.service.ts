@@ -13,7 +13,9 @@ import { User } from './entities/user.entity';
 export class UserService {
   private readonly logger = new Logger(UserService.name);
 
-  constructor(@InjectRepository(User) private userRepository: Repository<User>) {}
+  constructor(
+    @InjectRepository(User) private userRepository: Repository<User>,
+  ) {}
 
   async createUser(registerData: Partial<User>): Promise<User> {
     try {
@@ -46,17 +48,23 @@ export class UserService {
         if (registerData.email) {
           const existingEmailUser = await this.findByEmail(registerData.email);
           if (existingEmailUser) {
-            throw new ConflictException('A user with this email already exists');
+            throw new ConflictException(
+              'A user with this email already exists',
+            );
           }
         }
         if (registerData.phone) {
           const existingPhoneUser = await this.findByPhone(registerData.phone);
           if (existingPhoneUser) {
-            throw new ConflictException('A user with this phone number already exists');
+            throw new ConflictException(
+              'A user with this phone number already exists',
+            );
           }
         }
         // Fallback message if we can't determine which field caused the conflict
-        throw new ConflictException('A user with this email or phone number already exists');
+        throw new ConflictException(
+          'A user with this email or phone number already exists',
+        );
       }
 
       // Handle NestJS HTTP exceptions (re-throw as-is)
@@ -162,7 +170,9 @@ export class UserService {
       }
 
       const normalizedPhone = this.normalizePhoneNumber(phone);
-      return await this.userRepository.findOne({ where: { phone: normalizedPhone } });
+      return await this.userRepository.findOne({
+        where: { phone: normalizedPhone },
+      });
     } catch (err) {
       const error = err as Error;
       this.logger.error(
@@ -186,7 +196,7 @@ export class UserService {
 
   async updateUser(id: string, updateData: Partial<User>): Promise<User> {
     const user = await this.userRepository.findOne({ where: { id } });
-    
+
     if (!user) {
       throw new Error('User not found');
     }

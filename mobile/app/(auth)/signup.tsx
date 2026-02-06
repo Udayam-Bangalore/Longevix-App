@@ -3,6 +3,7 @@ import { useAuth } from "@/src/contexts/auth.context";
 import { Ionicons } from "@expo/vector-icons";
 import FontAwesome6 from "@expo/vector-icons/FontAwesome6";
 import { LinearGradient } from "expo-linear-gradient";
+import * as Linking from "expo-linking";
 import { router } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
 import {
@@ -514,8 +515,19 @@ export default function SignUpScreen() {
                 </View>
                 <Text style={styles.termsText}>
                   I agree to the{" "}
-                  <Text style={styles.termsLink}>Terms of Service</Text> and{" "}
-                  <Text style={styles.termsLink}>Privacy Policy</Text>
+                  <Text 
+                    style={styles.termsLink} 
+                    onPress={() => Linking.openURL("https://udayam.co.in/terms-conditions")}
+                  >
+                    Terms & Conditions
+                  </Text>{" "}
+                  and{" "}
+                  <Text 
+                    style={styles.termsLink} 
+                    onPress={() => Linking.openURL("https://udayam.co.in/privacy-policy")}
+                  >
+                    Privacy Policy
+                  </Text>
                 </Text>
               </TouchableOpacity>
 

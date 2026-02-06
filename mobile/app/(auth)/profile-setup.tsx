@@ -4,8 +4,10 @@ import { Ionicons } from "@expo/vector-icons";
 import FontAwesome6 from "@expo/vector-icons/FontAwesome6";
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { LinearGradient } from "expo-linear-gradient";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
+import { useNotificationsStore } from "@/src/store/notifications.store";
+import NotificationPermissionModal from "@/src/components/notifications/notification-permission-modal";
 import {
   Animated,
   Dimensions,
@@ -460,6 +462,9 @@ const Step2LifestyleGoals: React.FC<Step2Props> = ({
 
 
 export default function ProfileSetupScreen() {
+  const params = useLocalSearchParams<{ mode?: string }>();
+  const isEditMode = params.mode === "edit";
+  
   const [currentStep, setCurrentStep] = useState(1);
   const totalSteps = 2;
 
@@ -477,6 +482,24 @@ export default function ProfileSetupScreen() {
   
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(30)).current;
+
+  // Notification modal state
+  const [showNotificationModal, setShowNotificationModal] = useState(false);
+  const { hasSeenPrompt, setHasSeenPrompt, enableNotifications } = useNotificationsStore();
+  const { user, setUser } = useAuth();
+
+  // Load user data when in edit mode
+  useEffect(() => {
+    if (isEditMode && user) {
+      if (user.age) setAge(user.age.toString());
+      if (user.sex) setSex(user.sex as SexOption);
+      if (user.height) setHeight(user.height.toString());
+      if (user.weight) setWeight(user.weight?.toString() || "");
+      if (user.activityLevel) setActivityLevel(user.activityLevel as ActivityLevel);
+      if (user.dietType) setDietType(user.dietType as DietType);
+      if (user.primaryGoal) setPrimaryGoal(user.primaryGoal as PrimaryGoal);
+    }
+  }, [isEditMode, user]);
 
   useEffect(() => {
     
@@ -523,9 +546,20 @@ export default function ProfileSetupScreen() {
 
         const updatedUser = await authService.updateProfile(profileData);
         // Update user state in context
-        const { setUser } = useAuth();
         setUser(updatedUser);
-        router.replace("/(tabs)");
+        
+        // In edit mode, redirect to home directly
+        if (isEditMode) {
+          router.replace("/(tabs)");
+        } else {
+          // Show notification modal if user hasn't seen it before
+          if (!hasSeenPrompt) {
+            setShowNotificationModal(true);
+            setHasSeenPrompt(true);
+          } else {
+            router.replace("/(tabs)");
+          }
+        }
       } catch (error) {
         // Handle error - show toast or alert
       }
@@ -536,8 +570,25 @@ export default function ProfileSetupScreen() {
     if (currentStep > 1) {
       setCurrentStep(currentStep - 1);
     } else {
-      router.back();
+      // In edit mode, go back to profile; otherwise go back to login
+      if (isEditMode) {
+        router.replace("/(tabs)/profile");
+      } else {
+        router.back();
+      }
     }
+  };
+
+  // Notification modal handlers
+  const handleEnableNotifications = async () => {
+    await enableNotifications();
+    setShowNotificationModal(false);
+    router.replace("/(tabs)");
+  };
+
+  const handleSkipNotifications = () => {
+    setShowNotificationModal(false);
+    router.replace("/(tabs)");
   };
 
   return (
@@ -579,6 +630,9 @@ export default function ProfileSetupScreen() {
                     ]}
                   />
                 ))}
+                <Text style={styles.stepText}>
+                  {isEditMode ? "Edit Profile" : `Step ${currentStep}/${totalSteps}`}
+                </Text>
               </View>
 
               {/* Placeholder for balance */}
@@ -646,7 +700,7 @@ export default function ProfileSetupScreen() {
                   style={styles.nextButtonGradient}
                 >
                   <Text style={styles.nextButtonText}>
-                    {currentStep === totalSteps ? "Get Started" : "Next"}
+                    {currentStep === totalSteps ? (isEditMode ? "Save Changes" : "Start Your Journey") : "Next"}
                   </Text>
                   <Ionicons name="arrow-forward" size={20} color="#fff" />
                 </LinearGradient>
@@ -655,6 +709,13 @@ export default function ProfileSetupScreen() {
           </ScrollView>
         </KeyboardAvoidingView>
       </LinearGradient>
+
+      {/* Notification Permission Modal */}
+      <NotificationPermissionModal
+        visible={showNotificationModal}
+        onClose={handleSkipNotifications}
+        onEnable={handleEnableNotifications}
+      />
     </SafeAreaView>
   );
 }
@@ -705,6 +766,12 @@ const styles = StyleSheet.create({
   stepDotActive: {
     backgroundColor: "#2E7D32",
     width: 24,
+  },
+  stepText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#666",
+    marginLeft: 8,
   },
   headerPlaceholder: {
     width: 44,

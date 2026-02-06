@@ -22,10 +22,20 @@ export const API_CONFIG = {
       VERIFY_PHONE_AND_SET_USERNAME: "auth/verify-phone-and-set-username",
       RESEND_VERIFICATION_EMAIL: "auth/resend-verification-email",
       REFRESH_TOKEN: "auth/refresh-token",
+      EXCHANGE_SUPABASE_TOKEN: "auth/exchange-supabase-token",
     },
     AI: {
       CHAT: "ai/chat",
       GENERATE_NUTRIENT: "ai/generate-nutrient",
+      CHAT_AGENT: "ai/chat/agent",
+      TOOLS: {
+        NUTRITION_LOOKUP: "ai/tools/nutrition/lookup",
+        NUTRITION_RDA: "ai/tools/nutrition/rda",
+        VISION_ANALYZE: "ai/tools/vision/analyze",
+        RAG_RETRIEVE: "ai/tools/rag/retrieve",
+      },
+      AGENTS: "ai/agents",
+      SESSIONS: "ai/sessions",
     },
     MEALS: {
       BASE: "meals",
@@ -47,6 +57,3 @@ export const API_CONFIG = {
     },
   },
 };
-
-console.log("[API_CONFIG] BASE_URL:", API_CONFIG.BASE_URL);
-console.log("[API_CONFIG] __DEV__:", __DEV__);

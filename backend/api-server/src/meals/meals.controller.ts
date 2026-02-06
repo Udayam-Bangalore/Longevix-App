@@ -1,4 +1,15 @@
-import { Body, Controller, Delete, Get, Param, Post, Put, Query, Req, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Post,
+  Put,
+  Query,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
 import { AuthGuard } from '../auth/auth.guard';
 import { FoodItem } from './entities/meal.entity';
 import { MealsService } from './meals.service';
@@ -92,9 +103,15 @@ export class MealsController {
     @Req() req,
   ) {
     const userId = req.user.id;
-    const start = startDate ? new Date(startDate) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const start = startDate
+      ? new Date(startDate)
+      : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
     const end = endDate ? new Date(endDate) : new Date();
-    return this.nutritionAggregationService.getStatsForDateRange(userId, start, end);
+    return this.nutritionAggregationService.getStatsForDateRange(
+      userId,
+      start,
+      end,
+    );
   }
 
   @Get('stats/weekly')
@@ -104,16 +121,19 @@ export class MealsController {
     @Req() req,
   ) {
     const userId = req.user.id;
-    const start = startDate ? new Date(startDate) : new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
+    const start = startDate
+      ? new Date(startDate)
+      : new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
     const end = endDate ? new Date(endDate) : new Date();
-    return this.nutritionAggregationService.getWeeklyStatsForRange(userId, start, end);
+    return this.nutritionAggregationService.getWeeklyStatsForRange(
+      userId,
+      start,
+      end,
+    );
   }
 
   @Get('stats/monthly')
-  async getMonthlyStats(
-    @Query('year') year: string,
-    @Req() req,
-  ) {
+  async getMonthlyStats(@Query('year') year: string, @Req() req) {
     const userId = req.user.id;
     const yearNum = year ? parseInt(year, 10) : undefined;
     return this.nutritionAggregationService.getMonthlyStats(userId, yearNum);
@@ -122,22 +142,35 @@ export class MealsController {
   @Get('stats/summary')
   async getNutritionSummary(@Req() req) {
     const userId = req.user.id;
-    
+
     // Get last 7 days daily stats
     const endDate = new Date();
     const startDate = new Date();
     startDate.setDate(startDate.getDate() - 7);
-    const last7Days = await this.nutritionAggregationService.getStatsForDateRange(userId, startDate, endDate);
-    
+    const last7Days =
+      await this.nutritionAggregationService.getStatsForDateRange(
+        userId,
+        startDate,
+        endDate,
+      );
+
     // Get last 4 weeks
     const weekEnd = new Date();
     const weekStart = new Date();
     weekStart.setDate(weekStart.getDate() - 28);
-    const last4Weeks = await this.nutritionAggregationService.getWeeklyStatsForRange(userId, weekStart, weekEnd);
-    
+    const last4Weeks =
+      await this.nutritionAggregationService.getWeeklyStatsForRange(
+        userId,
+        weekStart,
+        weekEnd,
+      );
+
     // Get last 3 months
-    const monthlyStats = await this.nutritionAggregationService.getMonthlyStats(userId, new Date().getFullYear());
-    
+    const monthlyStats = await this.nutritionAggregationService.getMonthlyStats(
+      userId,
+      new Date().getFullYear(),
+    );
+
     return {
       last7Days,
       last4Weeks,

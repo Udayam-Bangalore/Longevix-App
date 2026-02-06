@@ -24,7 +24,10 @@ export class NutritionAggregationService {
   /**
    * Aggregate daily nutrition statistics for a specific user and date
    */
-  async aggregateDailyStats(userId: string, date: Date): Promise<NutritionDailyStats> {
+  async aggregateDailyStats(
+    userId: string,
+    date: Date,
+  ): Promise<NutritionDailyStats> {
     const startDate = new Date(date);
     startDate.setHours(0, 0, 0, 0);
 
@@ -50,22 +53,23 @@ export class NutritionAggregationService {
     let dinnerCalories = 0;
     let snackCalories = 0;
 
-    meals.forEach(meal => {
+    meals.forEach((meal) => {
       const mealName = meal.name.toLowerCase();
       const mealCalories = Number(meal.calories);
 
       totalCalories += mealCalories;
-      
+
       // Aggregate micronutrients
       if (meal.micronutrients) {
         Object.entries(meal.micronutrients).forEach(([key, value]) => {
-          totalMicronutrients[key] = (totalMicronutrients[key] || 0) + Number(value);
+          totalMicronutrients[key] =
+            (totalMicronutrients[key] || 0) + Number(value);
         });
       }
 
       // Aggregate macros from food items
       if (meal.items && meal.items.length > 0) {
-        meal.items.forEach(item => {
+        meal.items.forEach((item) => {
           totalProtein += Number(item.protein || 0);
           totalCarbs += Number(item.carbohydrates || 0);
           totalFat += Number(item.fat || 0);
@@ -114,7 +118,10 @@ export class NutritionAggregationService {
   /**
    * Aggregate weekly nutrition statistics
    */
-  async aggregateWeeklyStats(userId: string, weekStart: Date): Promise<NutritionWeeklyStats | null> {
+  async aggregateWeeklyStats(
+    userId: string,
+    weekStart: Date,
+  ): Promise<NutritionWeeklyStats | null> {
     const startDate = new Date(weekStart);
     startDate.setHours(0, 0, 0, 0);
 
@@ -131,7 +138,9 @@ export class NutritionAggregationService {
       .getMany();
 
     if (dailyStats.length === 0) {
-      this.logger.log(`No daily stats found for user ${userId} week starting ${startDate.toISOString()}`);
+      this.logger.log(
+        `No daily stats found for user ${userId} week starting ${startDate.toISOString()}`,
+      );
       return null;
     }
 
@@ -148,7 +157,7 @@ export class NutritionAggregationService {
     let totalDinnerCalories = 0;
     let totalSnackCalories = 0;
 
-    dailyStats.forEach(day => {
+    dailyStats.forEach((day) => {
       if (day.calories > 0) {
         daysTracked++;
         totalCalories += Number(day.calories);
@@ -163,7 +172,8 @@ export class NutritionAggregationService {
         // Aggregate micronutrients
         if (day.micronutrients) {
           Object.entries(day.micronutrients).forEach(([key, value]) => {
-            totalMicronutrients[key] = (totalMicronutrients[key] || 0) + Number(value);
+            totalMicronutrients[key] =
+              (totalMicronutrients[key] || 0) + Number(value);
           });
         }
 
@@ -222,7 +232,11 @@ export class NutritionAggregationService {
   /**
    * Aggregate monthly nutrition statistics
    */
-  async aggregateMonthlyStats(userId: string, year: number, month: number): Promise<NutritionMonthlyStats | null> {
+  async aggregateMonthlyStats(
+    userId: string,
+    year: number,
+    month: number,
+  ): Promise<NutritionMonthlyStats | null> {
     const monthStart = new Date(year, month - 1, 1);
     const monthEnd = new Date(year, month, 0); // Last day of the month
     monthEnd.setHours(23, 59, 59, 999);
@@ -239,7 +253,9 @@ export class NutritionAggregationService {
       .getMany();
 
     if (dailyStats.length === 0) {
-      this.logger.log(`No daily stats found for user ${userId} ${month}/${year}`);
+      this.logger.log(
+        `No daily stats found for user ${userId} ${month}/${year}`,
+      );
       return null;
     }
 
@@ -268,7 +284,7 @@ export class NutritionAggregationService {
     }> = [];
     let currentWeek: any = null;
 
-    dailyStats.forEach(day => {
+    dailyStats.forEach((day) => {
       if (day.calories > 0) {
         daysTracked++;
         totalCalories += Number(day.calories);
@@ -283,7 +299,8 @@ export class NutritionAggregationService {
         // Aggregate micronutrients
         if (day.micronutrients) {
           Object.entries(day.micronutrients).forEach(([key, value]) => {
-            totalMicronutrients[key] = (totalMicronutrients[key] || 0) + Number(value);
+            totalMicronutrients[key] =
+              (totalMicronutrients[key] || 0) + Number(value);
           });
         }
 
@@ -320,7 +337,7 @@ export class NutritionAggregationService {
 
     // Add last week
     if (currentWeek) {
-      const daysInWeek = dailyStats.filter(d => {
+      const daysInWeek = dailyStats.filter((d) => {
         const { weekNumber } = this.getWeekNumber(d.date);
         return weekNumber === currentWeek.weekNumber && d.calories > 0;
       }).length;
@@ -382,7 +399,9 @@ export class NutritionAggregationService {
     const startDate = new Date();
     startDate.setDate(startDate.getDate() - 90); // 3 months back
 
-    this.logger.log(`Starting full aggregation for user ${userId} from ${startDate.toISOString()} to ${endDate.toISOString()}`);
+    this.logger.log(
+      `Starting full aggregation for user ${userId} from ${startDate.toISOString()} to ${endDate.toISOString()}`,
+    );
 
     // Aggregate daily stats
     const currentDate = new Date(startDate);
@@ -393,7 +412,9 @@ export class NutritionAggregationService {
 
     // Aggregate weekly stats
     const currentWeekStart = new Date(startDate);
-    currentWeekStart.setDate(currentWeekStart.getDate() - currentWeekStart.getDay()); // Go to start of week
+    currentWeekStart.setDate(
+      currentWeekStart.getDate() - currentWeekStart.getDay(),
+    ); // Go to start of week
     while (currentWeekStart <= endDate) {
       await this.aggregateWeeklyStats(userId, new Date(currentWeekStart));
       currentWeekStart.setDate(currentWeekStart.getDate() + 7);
@@ -402,7 +423,11 @@ export class NutritionAggregationService {
     // Aggregate monthly stats
     const currentMonth = new Date(startDate);
     while (currentMonth <= endDate) {
-      await this.aggregateMonthlyStats(userId, currentMonth.getFullYear(), currentMonth.getMonth() + 1);
+      await this.aggregateMonthlyStats(
+        userId,
+        currentMonth.getFullYear(),
+        currentMonth.getMonth() + 1,
+      );
       currentMonth.setMonth(currentMonth.getMonth() + 1);
     }
 
@@ -431,7 +456,11 @@ export class NutritionAggregationService {
     this.logger.log(`Deleted ${deletedWeekly.affected} old weekly stats`);
 
     // Delete old monthly stats
-    const cutoffMonthStart = new Date(cutoffDate.getFullYear(), cutoffDate.getMonth(), 1);
+    const cutoffMonthStart = new Date(
+      cutoffDate.getFullYear(),
+      cutoffDate.getMonth(),
+      1,
+    );
     const deletedMonthly = await this.monthlyStatsRepository.delete({
       monthEnd: LessThan(cutoffMonthStart),
     });
@@ -497,11 +526,15 @@ export class NutritionAggregationService {
    * Helper method to get ISO week number
    */
   private getWeekNumber(date: Date): { weekNumber: number; year: number } {
-    const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+    const d = new Date(
+      Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()),
+    );
     const dayNum = d.getUTCDay() || 7;
     d.setUTCDate(d.getUTCDate() + 4 - dayNum);
     const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
-    const weekNumber = Math.ceil(((d.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
+    const weekNumber = Math.ceil(
+      ((d.getTime() - yearStart.getTime()) / 86400000 + 1) / 7,
+    );
     return { weekNumber, year: d.getUTCFullYear() };
   }
 }
