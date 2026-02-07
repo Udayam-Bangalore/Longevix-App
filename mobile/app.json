@@ -2,14 +2,14 @@
   "expo": {
     "name": "Longevix",
     "slug": "longevix",
-    "version": "1.0.3",
+    "version": "1.0.5",
     "orientation": "portrait",
     "icon": "./assets/images/logo1204.png",
     "scheme": "longevixapp",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "android": {
-      "versionCode": 6,
+      "versionCode": 8,
       "adaptiveIcon": {
         "backgroundImage": "./assets/images/android-icon-background.png",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
