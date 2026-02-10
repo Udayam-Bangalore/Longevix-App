@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   Logger,
   UnauthorizedException,
@@ -44,6 +45,19 @@ export class AuthService {
 
     if (error) {
       this.logger.error(`Registration error: ${error.message}`);
+      
+      // Check for email already registered error
+      const errorMessage = error.message.toLowerCase();
+      if (
+        errorMessage.includes('user already registered') ||
+        errorMessage.includes('email already registered') ||
+        errorMessage.includes('already exists') ||
+        errorMessage.includes('duplicate') ||
+        errorMessage.includes('user_already_exists')
+      ) {
+        throw new ConflictException('Email already exists');
+      }
+      
       throw new UnauthorizedException(error.message);
     }
 
